@@ -74,8 +74,8 @@ def build_jar() -> Path:
             with zipfile.ZipFile(lib) as z:
                 for info in z.infolist():
                     name = info.filename
-                    if info.is_dir() or name in seen:
-                        continue
+                    if info.is_dir() or name in seen or name.endswith("module-info.class"):
+                        continue  # one merged jar can't be several modules
                     if name.upper().startswith("META-INF/") and (
                             name.upper().endswith((".SF", ".RSA", ".DSA", ".MF"))):
                         continue
@@ -92,7 +92,7 @@ def build_runtime() -> Path:
                          "to bundle a Java runtime")
     modules = subprocess.run(
         [jdeps, "--multi-release", RELEASE, "--ignore-missing-deps", "--print-module-deps",
-         str(JAR)], check=True, capture_output=True, text=True).stdout.strip()
+         str(JAR)], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
     modules = ",".join(sorted(set(modules.split(",")) | {"java.base", "java.logging"}))
     shutil.rmtree(RUNTIME, ignore_errors=True)
     subprocess.run([jlink, "--add-modules", modules, "--output", str(RUNTIME), "--strip-debug",
