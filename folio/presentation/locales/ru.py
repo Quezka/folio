@@ -361,4 +361,11 @@ MESSAGES = {
     "Saved queries, forms and reports stay in the Folio file: Access can't hold them.": 'Сохранённые запросы, формы и отчёты остаются в файле Folio: Access не может их хранить.',
     "{links} relationships couldn't be kept.": 'Связей, которые не удалось сохранить: {links}.',
     '{columns} columns (pictures, attachments) were left out.': 'Столбцов (изображения, вложения), оставленных за бортом: {columns}.',
+    # ---- comfort and visibility
+    'Applies after a restart. Automatic is a comfortable, slightly larger size.': 'Применяется после перезапуска. «Авто» — удобный, чуть более крупный размер.',
+    'High contrast (black and white, thick lines)': 'Высокая контрастность (чёрное и белое, толстые линии)',
+    'required': 'обязательное',
+    'Fit the columns to their contents': 'Подогнать столбцы под содержимое',
+    'Sum {sum} · Average {avg} · {n} cells': 'Сумма {sum} · Среднее {avg} · ячеек: {n}',
+    'Currency': 'Валюта',
 }

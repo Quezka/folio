@@ -301,3 +301,52 @@ def test_changes_are_announced(shop):
     shop.save_table("Customers", TableDesign("Customers", (
         FieldDesign("id", I, True, True, original_name="id"), FieldDesign("name", T, original_name="name"))))
     assert seen == [Change.DATA, Change.OBJECTS, Change.SCHEMA]
+
+
+def test_a_money_field_survives_a_design_change_and_import(shop, tmp_path):
+    shop.save_table("Orders", TableDesign("Orders", (
+        FieldDesign("id", I, True, True, original_name="id"),
+        FieldDesign("customer", I, ref_table="Customers", ref_field="id", original_name="customer"),
+        FieldDesign("total", FieldType.CURRENCY, currency="GBP", original_name="total"))))
+    assert shop.table("Orders").field("total").type is FieldType.CURRENCY
+    assert shop.table("Orders").field("total").currency == "GBP"
+    src = tmp_path / "m.csv"
+    src.write_text("item;price\nPen;€ 1,50\nBook;€ 12,00\n", encoding="utf-8")
+    preview = shop.preview_csv(str(src))
+    assert preview.types[1] is FieldType.CURRENCY and preview.currencies[1] == "EUR"
+    shop.import_csv(ImportSpec(str(src), "Items", tuple(
+        ImportField(h, t, i, c) for i, (h, t, c) in enumerate(zip(preview.header, preview.types, preview.currencies)))))
+    assert shop.table("Items").field("price").currency == "EUR"
+    assert rows(shop, "Items") == [(1, "Pen", 1.5), (2, "Book", 12.0)]
+
+
+def test_query_results_keep_money_and_dates_typed(shop):
+    c = shop.insert_row("Customers", {"name": "Ada"})
+    shop.insert_row("Orders", {"customer": str(c), "total": "5"})
+    shop.save_table("Orders", TableDesign("Orders", (
+        FieldDesign("id", I, True, True, original_name="id"),
+        FieldDesign("customer", I, ref_table="Customers", ref_field="id", original_name="customer"),
+        FieldDesign("total", FieldType.CURRENCY, original_name="total"))))
+    design = QueryDesign(("Orders",), (), (QueryColumn("Orders", "total", total="sum"),))
+    shop.save_query("T", None, shop.build_sql(design), design)
+    column = shop.page(Source("query", "T")).columns[0]
+    assert column.type is FieldType.CURRENCY and column.currency == "EUR"
+
+
+def test_access_links_the_file_never_declared_are_inferred(ws, access):
+    A = AccessColumn
+    access.database = AccessDatabase((
+        AccessTable("Catene", (A("ID", "autonumber", key=True), A("Nome", "text")), ((1, "A"), (2, "B"))),
+        AccessTable("Negozi", (A("ID", "autonumber", key=True), A("Citta", "text"), A("ID_Catena", "integer")),
+                    ((1, "Milano", 1), (2, "Roma", 1), (3, "Bari", 2))),
+        AccessTable("Persone", (A("CF", "text", key=True), A("Salario", "currency", currency="EUR")),
+                    (("X1", 2500.0), ("X2", 2800.5))),
+        AccessTable("Dipendenti", (A("ID_Negozio", "integer", key=True), A("CF", "text", key=True)),
+                    ((1, "X1"), (2, "X2"))),
+        AccessTable("Numeri", (A("ID", "autonumber", key=True), A("Valore", "integer")), ((1, 1), (2, 2)))))
+    report = ws.import_access("x.accdb")
+    assert report.links_inferred == 3
+    assert {(r.child, r.child_field, r.parent) for r in ws.relationships()} == {
+        ("Negozi", "ID_Catena", "Catene"), ("Dipendenti", "ID_Negozio", "Negozi"),
+        ("Dipendenti", "CF", "Persone")}  # Catene.ID does not "point at" Negozi just because 1,2 ⊂ 1,2,3
+    assert ws.table("Persone").field("Salario").type is FieldType.CURRENCY

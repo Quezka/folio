@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 
 from ...application.inputs import FieldDesign, TableDesign
 from ...application.records import TableRecord
-from ...application.types import FieldType, ON_DELETE
+from ...application.types import DEFAULT_CURRENCY, FieldType, ON_DELETE, currency_symbol
 from ...application.workspace import Workspace
 from .. import theme
 from ..i18n import N_, _, Translated
@@ -18,11 +18,44 @@ from .common import button, icon_button, label, primary_button
 TYPE_NAMES = Translated({
     FieldType.TEXT: N_("Text"), FieldType.LONG_TEXT: N_("Long text"),
     FieldType.INTEGER: N_("Whole number"), FieldType.NUMBER: N_("Number"),
+    FieldType.CURRENCY: N_("Currency"),
     FieldType.YES_NO: N_("Yes/No"), FieldType.DATE: N_("Date"),
     FieldType.DATETIME: N_("Date and time"),
 })
 DELETE_NAMES = Translated({"NO ACTION": N_("Block"), "CASCADE": N_("Delete linked rows"),
                            "SET NULL": N_("Clear the link")})
+
+CURRENCY_CHOICES = ("EUR", "USD", "GBP", "CHF", "RUB", "JPY", "PLN")
+
+
+def fill_type_combo(box: QComboBox) -> None:
+    """Field types, with one entry per currency ("Currency € EUR")."""
+    for ftype, text in TYPE_NAMES.items():
+        if ftype is not FieldType.CURRENCY:
+            box.addItem(text, ftype.value)
+    for code in CURRENCY_CHOICES:
+        box.addItem(f"{TYPE_NAMES[FieldType.CURRENCY]} {currency_symbol(code)} {code}",
+                    f"currency:{code}")
+
+
+def type_key(ftype: FieldType, currency: str = "") -> str:
+    return f"currency:{currency or DEFAULT_CURRENCY}" if ftype is FieldType.CURRENCY else ftype.value
+
+
+def from_type_key(key: str) -> tuple[FieldType, str]:
+    if key.startswith("currency:"):
+        return FieldType.CURRENCY, key.partition(":")[2]
+    return FieldType(key), ""
+
+
+def select_type(box: QComboBox, ftype: FieldType, currency: str = "") -> None:
+    key = type_key(ftype, currency)
+    i = box.findData(key)
+    if i < 0 and ftype is FieldType.CURRENCY:  # a currency outside the short list
+        box.addItem(f"{TYPE_NAMES[FieldType.CURRENCY]} {currency_symbol(currency)} {currency}", key)
+        i = box.count() - 1
+    box.setCurrentIndex(max(0, i))
+
 
 NAME, TYPE, KEY, AUTO, REQUIRED, UNIQUE, DEFAULT, LINK, ON_DEL = range(9)
 
@@ -30,7 +63,7 @@ NAME, TYPE, KEY, AUTO, REQUIRED, UNIQUE, DEFAULT, LINK, ON_DEL = range(9)
 def design_of(record: TableRecord) -> TableDesign:
     return TableDesign(record.name, tuple(
         FieldDesign(f.name, f.type, f.primary_key, f.autonumber, f.required, f.unique,
-                    f.default, f.name, f.ref_table, f.ref_field, f.on_delete)
+                    f.default, f.currency, f.name, f.ref_table, f.ref_field, f.on_delete)
         for f in record.fields))
 
 
@@ -63,7 +96,7 @@ class TableDesigner(QWidget):
         self.grid.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.grid.setSelectionMode(QAbstractItemView.SingleSelection)
         header = self.grid.horizontalHeader()
-        for col, width in ((NAME, 170), (TYPE, 130), (KEY, 54), (AUTO, 54), (REQUIRED, 74),
+        for col, width in ((NAME, 170), (TYPE, 170), (KEY, 54), (AUTO, 54), (REQUIRED, 74),
                            (UNIQUE, 66), (DEFAULT, 100), (LINK, 150)):
             header.setSectionResizeMode(col, QHeaderView.Fixed)
             self.grid.setColumnWidth(col, width)
@@ -151,9 +184,8 @@ class TableDesigner(QWidget):
         item.setData(Qt.UserRole, d.original_name)
         self.grid.setItem(row, NAME, item)
         types = QComboBox()
-        for ftype, text in TYPE_NAMES.items():
-            types.addItem(text, ftype)
-        types.setCurrentIndex(max(0, types.findData(d.type)))
+        fill_type_combo(types)
+        select_type(types, d.type, d.currency)
         self.grid.setCellWidget(row, TYPE, types)
         for col, value in ((KEY, d.primary_key or d.autonumber), (AUTO, d.autonumber),
                            (REQUIRED, d.required), (UNIQUE, d.unique)):
@@ -191,8 +223,8 @@ class TableDesigner(QWidget):
         def sync():
             if auto.isChecked():
                 key.setChecked(True)
-                types.setCurrentIndex(types.findData(FieldType.INTEGER))
-            auto.setEnabled(types.currentData() is FieldType.INTEGER)
+                types.setCurrentIndex(types.findData("integer"))
+            auto.setEnabled(types.currentData() == "integer")
             if not auto.isEnabled():
                 auto.setChecked(False)
 
@@ -228,12 +260,13 @@ class TableDesigner(QWidget):
         for row in range(self.grid.rowCount()):
             item = self.grid.item(row, NAME)
             link = self.grid.cellWidget(row, LINK).currentData()
+            ftype, currency = from_type_key(self.grid.cellWidget(row, TYPE).currentData())
             result.append(FieldDesign(
-                item.text().strip(), self.grid.cellWidget(row, TYPE).currentData(),
+                item.text().strip(), ftype,
                 self._box(row, KEY).isChecked(), self._box(row, AUTO).isChecked(),
                 self._box(row, REQUIRED).isChecked(), self._box(row, UNIQUE).isChecked(),
                 (self.grid.item(row, DEFAULT).text() if self.grid.item(row, DEFAULT) else "").strip(),
-                item.data(Qt.UserRole), *(link.split("\t") if link else ("", "")),
+                currency, item.data(Qt.UserRole), *(link.split("\t") if link else ("", "")),
                 self.grid.cellWidget(row, ON_DEL).currentData()))
         return result
 

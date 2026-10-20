@@ -166,3 +166,27 @@ def test_report_groups_and_totals():
 def test_report_without_group():
     data = build_report(ReportDef("t", sort_by="n", descending=True), ["a", "n"], [("x", 1), ("y", 2)])
     assert [r[0] for r in data.groups[0].rows] == ["y", "x"]
+
+
+@pytest.mark.parametrize("text, value", [("1.234,50", 1234.5), ("1,234.50", 1234.5), ("€ 12,50", 12.5),
+                                         ("12.50 EUR", 12.5), ("$3", 3.0), ("2500", 2500.0), ("3,5", 3.5)])
+def test_money_is_read_the_way_people_write_it(text, value):
+    assert coerce(text, FieldType.CURRENCY) == value
+    assert coerce(text, FieldType.NUMBER) == value
+
+
+def test_currency_columns_keep_their_code_in_the_database():
+    from folio.domain.schema import parse_declared
+    f = Field("price", FieldType.CURRENCY, currency="usd")
+    sql = create_table_sql(Table("t", (f,)))
+    assert "CURRENCY_USD" in sql
+    assert parse_declared("CURRENCY_USD") == (FieldType.CURRENCY, "USD")
+    assert parse_declared("MONEY") == (FieldType.CURRENCY, "EUR")
+    sqlite3.connect(":memory:").execute(sql)
+
+
+def test_amounts_with_a_sign_are_guessed_as_money():
+    from folio.domain.values import detect_currency
+    assert guess_type(["€ 1.200,00", "€ 30,5"]) is FieldType.CURRENCY
+    assert detect_currency(["12 $", "3 $"]) == "USD" and detect_currency(["12", "3"]) == ""
+    assert guess_type(["12 €", "3 $"]) is not FieldType.CURRENCY  # two different currencies

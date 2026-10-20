@@ -24,7 +24,9 @@ td { padding: 4px 6px; border-bottom: 1px solid #ececf0; }
 """
 
 
-def report_html(title: str, view: ReportView, types: dict[str, FieldType | None]) -> str:
+def report_html(title: str, view: ReportView, types: dict[str, FieldType | None],
+                currencies: dict[str, str] | None = None) -> str:
+    currencies = currencies or {}
     cols = view.columns
     numeric = [types.get(c) is not None and types[c].is_numeric for c in cols]
 
@@ -35,14 +37,14 @@ def report_html(title: str, view: ReportView, types: dict[str, FieldType | None]
     def cells(row, bold=False) -> str:
         out = []
         for value, c, n in zip(row, cols, numeric):
-            text = "" if value is None else format_cell(value, types.get(c))
+            text = "" if value is None else format_cell(value, types.get(c), currencies.get(c, ""))
             out.append(f"<td{' class=num' if n else ''}>{escape(text)}</td>")
         return "<tr>" + "".join(out) + "</tr>"
 
     def sums(row, label) -> str:
         out = []
         for i, (value, c, n) in enumerate(zip(row, cols, numeric)):
-            text = label if i == 0 and value is None else ("" if value is None else format_cell(value, types.get(c)))
+            text = label if i == 0 and value is None else ("" if value is None else format_cell(value, types.get(c), currencies.get(c, "")))
             out.append(f"<td{' class=num' if n and i else ''}>{escape(text)}</td>")
         return "".join(out)
 
@@ -51,7 +53,7 @@ def report_html(title: str, view: ReportView, types: dict[str, FieldType | None]
     has_sums = any(s is not None for s in view.totals)
     for group in view.groups:
         if view.group_by:
-            key = _("(empty)") if group.key is None else format_cell(group.key, types.get(view.group_by))
+            key = _("(empty)") if group.key is None else format_cell(group.key, types.get(view.group_by), currencies.get(view.group_by, ""))
             body.append(f"<h2>{escape(view.group_by)}: {escape(key)}</h2>")
         body.append("<table width='100%'>" + head() + "".join(cells(r) for r in group.rows))
         if has_sums and (view.group_by):

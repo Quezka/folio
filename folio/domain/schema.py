@@ -14,6 +14,7 @@ class FieldType(Enum):
     LONG_TEXT = "longtext"
     INTEGER = "integer"
     NUMBER = "number"
+    CURRENCY = "currency"
     YES_NO = "yesno"
     DATE = "date"
     DATETIME = "datetime"
@@ -25,11 +26,13 @@ class FieldType(Enum):
 
     @property
     def is_numeric(self) -> bool:
-        return self in (FieldType.INTEGER, FieldType.NUMBER)
+        return self in (FieldType.INTEGER, FieldType.NUMBER, FieldType.CURRENCY)
 
     @staticmethod
     def from_declared(declared: str) -> "FieldType":
         d = (declared or "").upper()
+        if "CURRENCY" in d or "MONEY" in d:
+            return FieldType.CURRENCY
         if d == "LONGTEXT" or "CLOB" in d:
             return FieldType.LONG_TEXT
         if "BOOL" in d:
@@ -47,11 +50,39 @@ class FieldType(Enum):
 
 _DECLARED = {
     FieldType.TEXT: "TEXT", FieldType.LONG_TEXT: "LONGTEXT", FieldType.INTEGER: "INTEGER",
-    FieldType.NUMBER: "REAL", FieldType.YES_NO: "BOOLEAN", FieldType.DATE: "DATE",
+    FieldType.NUMBER: "REAL", FieldType.CURRENCY: "CURRENCY", FieldType.YES_NO: "BOOLEAN", FieldType.DATE: "DATE",
     FieldType.DATETIME: "DATETIME",
 }
 
 ON_DELETE = ("NO ACTION", "CASCADE", "SET NULL")
+
+DEFAULT_CURRENCY = "EUR"
+CURRENCIES = {"EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF", "RUB": "₽", "JPY": "¥",
+              "PLN": "zł", "CZK": "Kč", "SEK": "kr", "NOK": "kr", "DKK": "kr", "CAD": "$",
+              "AUD": "$", "CNY": "¥", "INR": "₹", "TRY": "₺", "UAH": "₴"}
+SYMBOL_CODES = {"€": "EUR", "$": "USD", "£": "GBP", "₽": "RUB", "¥": "JPY", "₹": "INR",
+                "₺": "TRY", "₴": "UAH", "zł": "PLN", "Kč": "CZK"}
+
+
+def currency_symbol(code: str) -> str:
+    return CURRENCIES.get(code, code)
+
+
+def declared_type(f: "Field") -> str:
+    """The column type written in CREATE TABLE: money carries its currency, CURRENCY_EUR
+    (SQLite only allows numbers in parentheses; an unknown name keeps NUMERIC affinity)."""
+    if f.type is FieldType.CURRENCY:
+        return f"CURRENCY_{(f.currency or DEFAULT_CURRENCY).upper()}"
+    return f.type.declared
+
+
+def parse_declared(declared: str) -> tuple[FieldType, str]:
+    """A declared column type back into a field type and (for money) its currency code."""
+    ftype = FieldType.from_declared(declared)
+    if ftype is not FieldType.CURRENCY:
+        return ftype, ""
+    inside = (declared or "").upper().partition("CURRENCY_")[2].strip()
+    return ftype, inside if inside.isalpha() and len(inside) == 3 else DEFAULT_CURRENCY
 
 
 def quote(name: str) -> str:
@@ -79,6 +110,7 @@ class Field:
     required: bool = False
     unique: bool = False
     default: str | None = None  # as the user typed it; "today" / "now" are understood
+    currency: str = ""  # for money fields: the code, e.g. "EUR"
 
 
 @dataclass(frozen=True)
@@ -169,7 +201,7 @@ def create_table_sql(table: Table, name: str | None = None) -> str:
     pk = table.primary_key
     lines = []
     for f in table.fields:
-        parts = [quote(f.name), f.type.declared]
+        parts = [quote(f.name), declared_type(f)]
         if f.autonumber:
             parts.append("PRIMARY KEY AUTOINCREMENT")
         elif f.primary_key and len(pk) == 1:

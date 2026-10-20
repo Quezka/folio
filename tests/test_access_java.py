@@ -115,3 +115,15 @@ def test_without_java_the_message_says_what_to_do(tmp_path, monkeypatch):
     target.write_bytes(b"x")
     with pytest.raises(FileFormatError, match="Java"):
         AccessFilesAdapter(jar=jar).read(str(target))
+
+
+def test_money_survives_access(adapter, tmp_path):
+    A = AccessColumn
+    db = AccessDatabase((AccessTable("Pay", (A("id", "autonumber", key=True), A("salary", "currency", currency="EUR"),
+                                              A("dollars", "currency", currency="USD")),
+                                      ((1, 2500.5, 3.25), (2, None, 1000.0))),))
+    path = str(tmp_path / "pay.accdb")
+    adapter.write(path, db)
+    back = adapter.read(path).tables[0]
+    assert [(c.kind, c.currency) for c in back.columns[1:]] == [("currency", "EUR"), ("currency", "USD")]
+    assert back.rows == ((1, 2500.5, 3.25), (2, None, 1000.0))

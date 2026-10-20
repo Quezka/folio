@@ -9,9 +9,9 @@ from typing import Callable
 
 from ..domain import objects as dom_objects
 from ..domain import query as dom_query
-from ..domain.schema import (Field, FieldType, ForeignKey, Table, relationships, validate_table,
-                             SchemaError)
-from ..domain.values import InvalidValueError, coerce, guess_type
+from ..domain.schema import (DEFAULT_CURRENCY, Field, FieldType, ForeignKey, Table, relationships,
+                             validate_table, SchemaError)
+from ..domain.values import InvalidValueError, coerce, detect_currency, guess_type
 from .errors import (ApplicationError, ConstraintError, DesignError, IncompleteRowError, NotFound,
                      NotOpenError)
 from . import inputs as app
@@ -55,6 +55,7 @@ class AccessImport:
     links: int  # relationships carried over
     links_lost: int  # relationships that couldn't be (the other table or key is missing)
     skipped_columns: int  # pictures, attachments and other things Folio can't hold
+    links_inferred: int = 0  # relationships the file didn't declare but its data and names show
 
 
 @dataclass(frozen=True)
@@ -65,12 +66,60 @@ class AccessExport:
 
 
 _FROM_ACCESS = {"autonumber": FieldType.INTEGER, "integer": FieldType.INTEGER,
-                "number": FieldType.NUMBER, "boolean": FieldType.YES_NO, "date": FieldType.DATE,
+                "number": FieldType.NUMBER, "currency": FieldType.CURRENCY, "boolean": FieldType.YES_NO, "date": FieldType.DATE,
                 "datetime": FieldType.DATETIME, "text": FieldType.TEXT,
                 "longtext": FieldType.LONG_TEXT}
 _TO_ACCESS = {FieldType.INTEGER: "integer", FieldType.NUMBER: "number",
+              FieldType.CURRENCY: "currency",
               FieldType.YES_NO: "boolean", FieldType.DATE: "date", FieldType.DATETIME: "datetime",
               FieldType.TEXT: "text", FieldType.LONG_TEXT: "longtext"}
+
+
+def _stem_matches(stem: str, table: str) -> bool:
+    """Does a column name like "ID_Negozio" / "CatenaId" point at a table called "Negozi"?"""
+    a, b = stem.lower(), table.lower()
+    if len(a) < 3 or len(b) < 3:
+        return False
+    return (a == b or a[:-1] == b or b[:-1] == a or a[:-1] == b[:-1] or a + "s" == b or b + "s" == a
+            or a + "es" == b)
+
+
+def _column_stem(name: str) -> str:
+    import re
+    return re.sub(r"(^id[_ ]?|[_ ]?id$)", "", name, flags=re.I)
+
+
+def _guess_links(source: AccessDatabase, declared: set[tuple[str, str]]):
+    """Links an Access file never declared: a column whose name echoes a table (ID_Negozio ->
+    Negozi) or a key (CF), and whose values all exist in that table's single-column key."""
+    keys = {}
+    for t in source.tables:
+        pk = [i for i, c in enumerate(t.columns) if c.key]
+        if len(pk) == 1:
+            i = pk[0]
+            keys[t.name] = (t.columns[i], {r[i] for r in t.rows if r[i] is not None})
+    textual = {"text"}
+    for t in source.tables:
+        for i, c in enumerate(t.columns):
+            if (t.name, c.name) in declared or c.kind not in ("integer", "autonumber", "text"):
+                continue
+            if c.kind == "autonumber" or t.name in keys and keys[t.name][0] is c:
+                continue  # a table's own key identifies it; it doesn't point elsewhere
+            values = {r[i] for r in t.rows if r[i] is not None}
+            if not values:
+                continue
+            found = []
+            for parent, (key, key_values) in keys.items():
+                if parent == t.name or (key.kind in textual) != (c.kind in textual):
+                    continue
+                if not values <= key_values:
+                    continue
+                same_name = c.name.lower() == key.name.lower()
+                echoes = _stem_matches(_column_stem(c.name), parent) and c.name.lower() != "id"
+                if same_name or echoes:
+                    found.append((parent, key.name))
+            if len(found) == 1:
+                yield t.name, c.name, found[0][0], found[0][1]
 
 
 @dataclass
@@ -211,7 +260,8 @@ class Workspace:
         key = t.foreign_key(f.name)
         return FieldRecord(f.name, f.type, f.primary_key, f.autonumber, f.required, f.unique,
                            f.default or "", key.ref_table if key else "",
-                           key.ref_field if key else "", key.on_delete if key else "NO ACTION")
+                           key.ref_field if key else "", key.on_delete if key else "NO ACTION",
+                           f.currency)
 
     def tables(self) -> list[TableRecord]:
         return [self.table(t.name) for t in self._schema()]
@@ -234,7 +284,8 @@ class Workspace:
         for f in design.fields:
             primary = f.primary_key or f.autonumber
             fields.append(Field(f.name.strip(), f.type, primary, f.autonumber, f.required,
-                                f.unique, f.default.strip() or None))
+                                f.unique, f.default.strip() or None,
+                                (f.currency or DEFAULT_CURRENCY) if f.type is FieldType.CURRENCY else ""))
             if f.ref_table:
                 keys.append(ForeignKey(f.name.strip(), f.ref_table, f.ref_field, f.on_delete))
         return Table(design.name.strip(), tuple(fields), tuple(keys))
@@ -321,8 +372,24 @@ class Workspace:
             t = self._table(source.name)
             return [ColumnRecord(f.name, f.type,
                                  (t.foreign_key(f.name).ref_table if t.foreign_key(f.name) else ""),
-                                 not f.autonumber, f.required) for f in t.fields]
-        return [ColumnRecord(n, None, "", False) for n in self._db.check_select(self._query_sql(source))]
+                                 not f.autonumber, f.required, f.currency) for f in t.fields]
+        return [self._query_column(n) for n in self._db.check_select(self._query_sql(source))]
+
+    def _query_column(self, name: str) -> ColumnRecord:
+        """A query column, typed like the table field it's named after when that's unambiguous
+        (so money stays money and dates stay dates in the results)."""
+        base = name
+        for prefix in ("Sum of ", "Average of ", "Min of ", "Max of "):
+            if name.startswith(prefix):
+                base = name[len(prefix):]
+        if name.startswith("Count of "):
+            return ColumnRecord(name, FieldType.INTEGER, "", False)
+        found = {(f.type, f.currency) for t in self._schema() for f in t.fields
+                 if f.name.lower() == base.lower() and not (t.foreign_key(f.name) or f.type is FieldType.YES_NO and False)}
+        if len(found) == 1:
+            ftype, currency = next(iter(found))
+            return ColumnRecord(name, ftype, "", False, False, currency)
+        return ColumnRecord(name, None, "", False)
 
     def page(self, source: Source, query: RowQuery = RowQuery(), offset: int = 0,
              limit: int = PAGE) -> PageRecord:
@@ -335,7 +402,7 @@ class Workspace:
         sql = self._query_sql(source)
         names, rows = self._db.fetch_query(sql, query, offset, limit)
         total = self._db.count_query(sql, query)
-        return PageRecord(tuple(ColumnRecord(n, None, "", False) for n in names),
+        return PageRecord(tuple(self._query_column(n) for n in names),
                           tuple(RowRecord(None, tuple(r)) for r in rows), total)
 
     def lookup(self, table: str, key_field: str | None = None) -> list[LookupOption]:
@@ -616,7 +683,10 @@ class Workspace:
         header = self._names(rows[0]) if has_header else [f"Column {i}" for i in range(1, width + 1)]
         data = rows[1:] if has_header else rows
         types = tuple(guess_type([r[i] for r in data[:2000]]) for i in range(width))
-        return CsvPreview(tuple(header), tuple(tuple(r) for r in data[:20]), types, len(data))
+        currencies = tuple((detect_currency([r[i] for r in data[:2000]]) or DEFAULT_CURRENCY)
+                           if types[i] is FieldType.CURRENCY else "" for i in range(width))
+        return CsvPreview(tuple(header), tuple(tuple(r) for r in data[:20]), types, currencies,
+                          len(data))
 
     def import_csv(self, spec: ImportSpec) -> ImportResult:
         rows = self._csv.read(spec.path)
@@ -630,7 +700,7 @@ class Workspace:
                 if t.field(f.name) is None:
                     raise DesignError("A column doesn't match any field of that table.")
         else:
-            fields = [FieldDesign(f.name, f.type) for f in spec.fields]
+            fields = [FieldDesign(f.name, f.type, currency=f.currency) for f in spec.fields]
             if spec.add_key:
                 key_name = "id"
                 while any(f.name.lower() == key_name for f in spec.fields):
@@ -685,9 +755,14 @@ class Workspace:
                 linked += 1
             else:
                 lost += 1
+        inferred = 0
+        for child, field, parent, parent_field in _guess_links(source, {
+                (l.child, l.child_field) for l in source.links}):
+            if self._link(names.get(child), field, names.get(parent), parent_field, False, False):
+                inferred += 1
         self._schema_cache = None
         self._emit(Change.SCHEMA)
-        return AccessImport(tuple(results), linked, lost, skipped_columns)
+        return AccessImport(tuple(results), linked, lost, skipped_columns, inferred)
 
     def _import_access_table(self, source: AccessTable) -> ImportResult:
         existing = {n.lower() for n in self.table_names()}
@@ -702,7 +777,8 @@ class Workspace:
             single = len(keys) == 1 and c.key
             fields.append(FieldDesign(fname, ftype, primary_key=c.key,
                                       autonumber=single and c.kind == "autonumber",
-                                      required=c.required and not c.key, unique=c.unique and not c.key))
+                                      required=c.required and not c.key, unique=c.unique and not c.key,
+                                      currency=c.currency or (DEFAULT_CURRENCY if ftype is FieldType.CURRENCY else "")))
             types.append(ftype)
         self.save_table(None, TableDesign(name, tuple(fields)))
         t = self._table(name)
@@ -728,7 +804,7 @@ class Workspace:
             return int(value)
         if ftype in (FieldType.TEXT, FieldType.LONG_TEXT):
             return str(value)
-        if ftype is FieldType.NUMBER:
+        if ftype in (FieldType.NUMBER, FieldType.CURRENCY):
             return float(value)
         return coerce(value if isinstance(value, str) else str(value), ftype)
 
@@ -744,7 +820,7 @@ class Workspace:
             action = "CASCADE" if cascade else ("SET NULL" if set_null else "NO ACTION")
             fields = tuple(
                 FieldDesign(f.name, f.type, f.primary_key, f.autonumber, f.required, f.unique,
-                            f.default, f.name,
+                            f.default, f.currency, f.name,
                             parent if f.name == child_field else f.ref_table,
                             parent_field if f.name == child_field else f.ref_field,
                             action if f.name == child_field else f.on_delete)
@@ -770,7 +846,8 @@ class Workspace:
                 elif f.type is FieldType.INTEGER and any(abs(v) >= 2 ** 31 for v in values):
                     kind = "number"  # Access whole numbers are 32 bits
                 kinds.append(kind)
-                columns.append(AccessColumn(f.name, kind, f.primary_key, f.unique, f.required))
+                columns.append(AccessColumn(f.name, kind, f.primary_key, f.unique, f.required,
+                                            f.currency or DEFAULT_CURRENCY if kind == "currency" else ""))
             data = tuple(tuple(self._for_access(v, k) for v, k in zip(r, kinds)) for r in rows)
             tables.append(AccessTable(t.name, tuple(columns), data))
             for key in t.foreign_keys:
@@ -785,7 +862,7 @@ class Workspace:
             return None
         if kind == "boolean":
             return bool(value)
-        if kind == "number":
+        if kind in ("number", "currency"):
             return float(value)
         if kind in ("integer", "autonumber"):
             return int(value)

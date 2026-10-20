@@ -20,6 +20,9 @@ def create_application(argv: list[str]) -> QApplication:
         uiscale.apply_before_app()  # Qt reads the scale factor once, as the app is created
     app = QApplication.instance() or QApplication(argv)
     app.setStyle("Fusion")
+    font = app.font()
+    font.setPointSizeF(max(font.pointSizeF(), 11.0))  # bigger than the system default
+    app.setFont(font)
     leave_on_enter.install(app)  # Enter in a one-line box lets go of it
     app.setWindowIcon(QIcon(str(APP_ICON)))
     i18n.install(app=app)  # before any window is built: texts are translated as they're made

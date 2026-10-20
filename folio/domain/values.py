@@ -4,7 +4,15 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 
-from .schema import FieldType
+from .schema import SYMBOL_CODES, FieldType
+
+
+def _try(text: str) -> bool:
+    try:
+        parse_number(text)
+        return True
+    except ValueError:
+        return False
 
 
 class InvalidValueError(ValueError):
@@ -42,6 +50,30 @@ def parse_datetime(text: str) -> datetime:
     raise InvalidValueError("That isn't a date and time. Write it like 2026-10-20 14:30.")
 
 
+_SYMBOLS = "€$£₽¥₹₺₴"
+
+
+def strip_money(text: str) -> str:
+    """Drop currency symbols and codes (€ 12,50, 12.50 EUR, $3) so only the number is left."""
+    cleaned = re.sub(r"[%s]|\b(?:EUR|USD|GBP|CHF|RUB|JPY|PLN|CZK|SEK|NOK|DKK|CAD|AUD|CNY|INR|TRY|UAH)\b|zł|Kč"
+                     % _SYMBOLS, "", text, flags=re.I)
+    return cleaned.replace("\u00a0", " ").replace(" ", "").replace("'", "")
+
+
+def parse_number(text: str) -> float:
+    """A number as people write it: 1234.5, 3,5, 1.234,50 and 1,234.50 all work."""
+    t = strip_money(text)
+    if "," in t and "." in t:
+        decimal = "," if t.rfind(",") > t.rfind(".") else "."
+        thousands = "." if decimal == "," else ","
+        t = t.replace(thousands, "").replace(decimal, ".")
+    elif "," in t:
+        t = t.replace(",", ".") if t.count(",") == 1 else t.replace(",", "")
+    elif t.count(".") > 1:
+        t = t.replace(".", "")
+    return float(t)
+
+
 def coerce(text, ftype: FieldType):
     """The value to store for `text` (None for empty). Raises InvalidValueError."""
     if text is None:
@@ -64,12 +96,14 @@ def coerce(text, ftype: FieldType):
             if number != int(number):
                 raise InvalidValueError("That isn't a whole number.")
             return int(number)
-    if ftype is FieldType.NUMBER:
-        cleaned = text.replace(",", ".") if "." not in text else text.replace(",", "")
+    if ftype in (FieldType.NUMBER, FieldType.CURRENCY):
         try:
-            return float(cleaned)
+            number = parse_number(text)
         except ValueError:
             raise InvalidValueError("That isn't a number.") from None
+        if number != number or number in (float("inf"), float("-inf")):
+            raise InvalidValueError("That isn't a number.")
+        return round(number, 4) if ftype is FieldType.CURRENCY else number
     if ftype is FieldType.YES_NO:
         low = text.lower()
         if low in TRUE:
@@ -82,6 +116,21 @@ def coerce(text, ftype: FieldType):
     if ftype is FieldType.DATETIME:
         return parse_datetime(text).strftime("%Y-%m-%d %H:%M:%S")
     raise InvalidValueError("That value doesn't fit.")  # pragma: no cover
+
+
+def detect_currency(samples: list[str]) -> str:
+    """The currency code if the values are amounts written with a currency sign ("" if not)."""
+    values = [s.strip() for s in samples if s is not None and s.strip() != ""]
+    if not values:
+        return ""
+    codes = set()
+    for v in values:
+        sign = re.search(r"[%s]|zł|Kč|\b(EUR|USD|GBP|CHF|RUB|JPY|PLN|CZK)\b" % _SYMBOLS, v)
+        if not sign or not re.fullmatch(r"[^\d]*[+-]?\d[\d.,\s\u00a0']*[^\d]*", v):
+            return ""
+        token = sign.group(1) or sign.group(0)
+        codes.add(token.upper() if len(token) == 3 and token.isalpha() else SYMBOL_CODES.get(token, ""))
+    return codes.pop() if len(codes) == 1 and "" not in codes else ""
 
 
 def guess_type(samples: list[str]) -> FieldType:
@@ -98,6 +147,8 @@ def guess_type(samples: list[str]) -> FieldType:
             return False
         return True
 
+    if detect_currency(values) and all(_try(v) for v in values):
+        return FieldType.CURRENCY
     if all(v.lower() in ("yes", "no", "true", "false") for v in values):
         return FieldType.YES_NO
     if any(re.fullmatch(r"[+-]?0\d+", v) for v in values):

@@ -1,6 +1,8 @@
 """The relationships diagram: tables as boxes, links as lines."""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
@@ -308,10 +310,8 @@ class RelationsPage(Page):
     def _set_link(self, table: str, field: str, ref_table: str, ref_field: str, action: str):
         record = self.ws.table(table)
         design = design_of(record)
-        fields = tuple(
-            FieldDesign(f.name, f.type, f.primary_key, f.autonumber, f.required, f.unique,
-                        f.default, f.original_name, ref_table, ref_field, action)
-            if f.name == field else f for f in design.fields)
+        fields = tuple(replace(f, ref_table=ref_table, ref_field=ref_field, on_delete=action)
+                       if f.name == field else f for f in design.fields)
         try:
             self.ws.save_table(table, type(design)(design.name, fields))
         except ApplicationError as e:

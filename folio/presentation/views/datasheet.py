@@ -1,8 +1,8 @@
 """The datasheet: rows of a table or query, editable in place like a spreadsheet."""
 from __future__ import annotations
 
-from PySide6.QtCore import (QAbstractTableModel, QDate, QModelIndex, QPoint, QSortFilterProxyModel,
-                            Qt, QTimer, Signal)
+from PySide6.QtCore import (QAbstractTableModel, QDate, QModelIndex, QPoint, QSettings,
+                            QSortFilterProxyModel, Qt, QTimer, Signal)
 from PySide6.QtGui import QAction, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDateEdit, QFrame, QHBoxLayout, QLabel, QLineEdit, QMenu,
@@ -14,23 +14,15 @@ from ...application.records import ColumnRecord
 from ...application.types import FieldType, RowQuery
 from ...application.workspace import PAGE, Source, Workspace
 from .. import theme
-from ..datasheet_format import format_cell
+from ..datasheet_format import edit_text, format_cell, format_money
 from ..i18n import _, plural
 from .common import icon_button
 
 KEY_ROLE = Qt.UserRole + 1
 
 
-def format_value(value, ftype: FieldType | None) -> str:
-    return format_cell(value, ftype)
-
-
-def edit_text(value, ftype: FieldType | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return format_value(value, ftype)
-    return str(value)
+def format_value(value, ftype: FieldType | None, currency: str = "") -> str:
+    return format_cell(value, ftype, currency)
 
 
 class DatasheetModel(QAbstractTableModel):
@@ -71,7 +63,29 @@ class DatasheetModel(QAbstractTableModel):
         self.endResetModel()
 
     def refresh(self):
-        self.reload(len(self.rows))
+        """Pick up changes without a reset when only values changed, so the cursor and the
+        scroll position stay where they are."""
+        keep = max(PAGE, len(self.rows))
+        try:
+            page = self.ws.page(self.source, self.query, 0, keep)
+        except ApplicationError:
+            self.reload(len(self.rows))
+            return
+        same_shape = (len(page.rows) == len(self.rows) and page.total == self.total
+                      and [c.name for c in page.columns] == [c.name for c in self.columns]
+                      and [r.key for r in page.rows] == [r.key for r in self.rows])
+        if not same_shape:
+            self.reload(len(self.rows))
+            return
+        self.rows = list(page.rows)
+        for i, c in enumerate(self.columns):
+            if c.ref_table:
+                table = self.ws.table(self.source.name)
+                ref = table.field(c.name).ref_field
+                self.labels[i] = {o.key: o.label for o in self.ws.lookup(c.ref_table, ref)}
+        if self.rows:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self.rows) - 1,
+                                                                 len(self.columns) - 1))
 
     def canFetchMore(self, parent=QModelIndex()):
         return not parent.isValid() and len(self.rows) < self.total
@@ -97,6 +111,13 @@ class DatasheetModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.columns)
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.TextAlignmentRole:
+            c = self.columns[section]
+            numeric = c.type is not None and c.type.is_numeric and not c.ref_table
+            return int((Qt.AlignRight if numeric else Qt.AlignLeft) | Qt.AlignVCenter)
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole:
+            c = self.columns[section]
+            return c.name + (" — " + _("required") if c.required else "")
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
@@ -130,7 +151,10 @@ class DatasheetModel(QAbstractTableModel):
                 return ""
             if index.column() in self.labels and value is not None:
                 return self.labels[index.column()].get(value, str(value))
-            return format_value(value, col.type)
+            return format_value(value, col.type, col.currency)
+        if role == Qt.ToolTipRole:
+            shown = self.data(index, Qt.DisplayRole)
+            return shown if shown and len(str(shown)) > 24 else None
         if role == Qt.EditRole:
             return edit_text(value, col.type)
         if role == Qt.TextAlignmentRole:
@@ -258,8 +282,29 @@ class _ComboDelegate(QStyledItemDelegate):
 class _DateDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         edit = QLineEdit(parent)
-        edit.setPlaceholderText("2026-10-20")
+        edit.setPlaceholderText(format_cell("2026-10-20", FieldType.DATE))
         return edit
+
+
+class SheetView(QTableView):
+    """A table view where Enter finishes an edit and moves down, like a spreadsheet."""
+
+    def closeEditor(self, editor, hint):
+        index = self.currentIndex()
+        super().closeEditor(editor, hint)
+        if hint == QStyledItemDelegate.SubmitModelCache and index.isValid():
+            below = self.model().index(index.row() + 1, index.column())
+            if below.isValid():
+                self.setCurrentIndex(below)
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            self.zoomRequested.emit(1 if event.angleDelta().y() > 0 else -1)
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    zoomRequested = Signal(int)
 
 
 class Datasheet(QWidget):
@@ -282,6 +327,7 @@ class Datasheet(QWidget):
         self._search_timer.timeout.connect(self._apply_search)
         self.search.textChanged.connect(lambda _t: self._search_timer.start())
         self.count = QLabel(objectName="muted")
+        self.summary = QLabel(objectName="muted")  # sum / average of the selected numbers
         self.hint = QLabel(objectName="danger")
         self.hint.setWordWrap(True)
         self.hint.hide()
@@ -291,6 +337,8 @@ class Datasheet(QWidget):
         self.redo_button = icon_button("redo", _("Redo (Ctrl+Shift+Z)"))
         self.delete_button = icon_button("trash", _("Delete the selected rows (Delete)"))
         self.export_button = icon_button("download", _("Export as CSV…"))
+        self.fit_button = icon_button("fit", _("Fit the columns to their contents"))
+        self.fit_button.clicked.connect(self.fit_columns)
         self.undo_button.clicked.connect(self.undo)
         self.redo_button.clicked.connect(self.redo)
         self.delete_button.clicked.connect(self.delete_selected_rows)
@@ -300,11 +348,15 @@ class Datasheet(QWidget):
         bar.addWidget(self.search)
         bar.addLayout(self.chips)
         bar.addStretch()
+        bar.addWidget(self.summary)
+        bar.addSpacing(14)
         bar.addWidget(self.count)
-        for b in (self.undo_button, self.redo_button, self.delete_button, self.export_button):
+        bar.addSpacing(10)
+        for b in (self.fit_button, self.undo_button, self.redo_button, self.delete_button,
+                  self.export_button):
             bar.addWidget(b)
 
-        self.view = QTableView()
+        self.view = SheetView()
         self.view.setObjectName("datasheet")
         self.view.setAlternatingRowColors(True)
         self.view.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -314,8 +366,19 @@ class Datasheet(QWidget):
         self.view.horizontalHeader().setStretchLastSection(True)
         self.view.horizontalHeader().setHighlightSections(False)
         self.view.horizontalHeader().setSectionsMovable(False)
-        self.view.verticalHeader().setDefaultSectionSize(30)
+        self.zoom = self._saved_zoom()
+        self._apply_zoom()
         self.view.verticalHeader().setMinimumWidth(34)
+        self.view.zoomRequested.connect(lambda step: self.set_zoom(self.zoom + step * 10))
+        self.view.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.view.setWordWrap(False)
+        self.view.setTextElideMode(Qt.ElideRight)
+        self.view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.view.horizontalHeader().setMinimumSectionSize(48)
+        self.view.horizontalHeader().sectionResized.connect(self._remember_width)
+        self._width_timer = QTimer(self, singleShot=True, interval=400)
+        self._width_timer.timeout.connect(self._save_widths)
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._menu)
         self.view.setShowGrid(True)
@@ -358,9 +421,11 @@ class Datasheet(QWidget):
                 self.view.setItemDelegateForColumn(i, _ComboDelegate(self.model, self.view))
             elif c.type in (FieldType.DATE, FieldType.DATETIME):
                 self.view.setItemDelegateForColumn(i, _DateDelegate(self.view))
-            width = 150 if c.type in (FieldType.TEXT, FieldType.LONG_TEXT, None) else 110
-            self.view.setColumnWidth(i, max(width, min(260, 12 * len(c.name) + 40)))
+        self.view.selectionModel().selectionChanged.connect(lambda *_a: self._update_summary())
+        self.fit_columns()
+        self._restore_widths()
         self.export_button.setEnabled(True)
+        self.summary.setText("")
         self._after_reload()
         self._update_buttons()
 
@@ -491,6 +556,15 @@ class Datasheet(QWidget):
             else:
                 self.clear_selected_cells()
             return
+        if event.modifiers() & Qt.ControlModifier and event.key() in (Qt.Key_Plus, Qt.Key_Equal):
+            self.set_zoom(self.zoom + 10)
+            return
+        if event.modifiers() & Qt.ControlModifier and event.key() == Qt.Key_Minus:
+            self.set_zoom(self.zoom - 10)
+            return
+        if event.modifiers() & Qt.ControlModifier and event.key() == Qt.Key_0:
+            self.set_zoom(115)
+            return
         if event.matches(QKeySequence.Copy) and self.view.hasFocus():
             self.copy()
             return
@@ -521,6 +595,88 @@ class Datasheet(QWidget):
                 self.view.edit(m.index(row, c))
                 break
 
+    # ---- comfort: widths, zoom, summary ------------------------------------------------
+    def _settings_key(self) -> str:
+        from pathlib import Path
+        m = self.model
+        return f"sheet/{Path(self.ws.path or '').name}/{m.source.kind}:{m.source.name[:60]}" if m else ""
+
+    def fit_columns(self):
+        """Make every column as wide as its contents (within reason)."""
+        if self.model is None:
+            return
+        self.view.resizeColumnsToContents()
+        header = self.view.horizontalHeader()
+        for i in range(self.model.columnCount()):
+            header.resizeSection(i, max(72, min(header.sectionSize(i) + 14, 340)))
+        header.setStretchLastSection(True)
+        self._save_widths()
+
+    def _restore_widths(self):
+        key = self._settings_key()
+        saved = QSettings().value(key + "/widths") if key else None
+        if not isinstance(saved, (list, tuple)) or self.model is None:
+            return
+        try:
+            widths = [int(w) for w in saved]
+        except (TypeError, ValueError):
+            return
+        if len(widths) == self.model.columnCount():
+            for i, w in enumerate(widths):
+                self.view.horizontalHeader().resizeSection(i, w)
+
+    def _remember_width(self, *_args):
+        self._width_timer.start()
+
+    def _save_widths(self):
+        key = self._settings_key()
+        if key and self.model is not None:
+            h = self.view.horizontalHeader()
+            QSettings().setValue(key + "/widths", [h.sectionSize(i) for i in range(h.count())])
+
+    def _saved_zoom(self) -> int:
+        try:
+            return max(70, min(200, int(QSettings().value("sheet/zoom", 115))))
+        except (TypeError, ValueError):
+            return 115
+
+    def set_zoom(self, percent: int):
+        self.zoom = max(70, min(200, percent))
+        QSettings().setValue("sheet/zoom", self.zoom)
+        self._apply_zoom()
+
+    def _apply_zoom(self):
+        font = self.view.font()
+        base = QGuiApplication.font().pointSizeF()
+        font.setPointSizeF(base * self.zoom / 100 if base > 0 else 10 * self.zoom / 100)
+        self.view.setFont(font)
+        self.view.verticalHeader().setDefaultSectionSize(round(32 * self.zoom / 100))
+
+    def _update_summary(self):
+        """Sum and average of the selected numbers, like a spreadsheet's status bar."""
+        m = self.model
+        if m is None:
+            return
+        values, codes, columns = [], set(), set()
+        for index in self.view.selectionModel().selectedIndexes():
+            if index.row() >= len(m.rows):
+                continue
+            col = m.columns[index.column()]
+            v = m.rows[index.row()].values[index.column()]
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and not col.ref_table \
+                    and (col.type is None or col.type.is_numeric):
+                values.append(float(v))
+                columns.add(index.column())
+                codes.add(col.currency if col.type is FieldType.CURRENCY else "")
+        if len(values) < 2:
+            self.summary.setText("")
+            return
+        total = sum(values)
+        money = len(codes) == 1 and next(iter(codes))
+        fmt = (lambda x: format_money(x, money)) if money else (lambda x: format_cell(x, None))
+        self.summary.setText(_("Sum {sum} · Average {avg} · {n} cells").format(
+            sum=fmt(total), avg=fmt(total / len(values)), n=len(values)))
+
     def undo(self):
         self._run(self.ws.undo)
 
@@ -539,6 +695,7 @@ class Datasheet(QWidget):
         self.redo_button.setEnabled(editable and self.ws.can_redo)
         self.delete_button.setEnabled(editable)
         self.export_button.setEnabled(self.model is not None)
+        self.fit_button.setEnabled(self.model is not None)
 
     def _problem(self, text: str):
         self.hint.setText(text)

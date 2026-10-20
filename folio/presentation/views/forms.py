@@ -15,6 +15,7 @@ from ...application.workspace import Change, Source, Workspace
 from ..fit import clamp_dialog
 from ..i18n import _
 from .common import Card, Segmented, button, caption, icon_button, label, primary_button
+from ..datasheet_format import format_cell
 from .datasheet import edit_text, format_value
 from .objects import Header, ObjectPage
 
@@ -187,7 +188,7 @@ class FormView(QWidget):
         edit = QLineEdit()
         edit.setReadOnly(read_only)
         if col.type in (FieldType.DATE, FieldType.DATETIME):
-            edit.setPlaceholderText("2026-10-20")
+            edit.setPlaceholderText(format_cell("2026-10-20", FieldType.DATE))
         edit.editingFinished.connect(lambda n=f.name: self._commit_field(n))
         return edit
 
@@ -217,7 +218,8 @@ class FormView(QWidget):
         elif isinstance(editor, QPlainTextEdit):
             editor.setPlainText(edit_text(value, col.type))
         else:
-            editor.setText(edit_text(value, col.type) if self.editable else format_value(value, col.type))
+            editor.setText(edit_text(value, col.type) if self.editable
+                           else format_value(value, col.type, col.currency))
         self._loading = False
 
     # ---- navigating ------------------------------------------------------------------

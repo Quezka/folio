@@ -19,6 +19,7 @@ class FieldRecord:
     ref_table: str = ""
     ref_field: str = ""
     on_delete: str = "NO ACTION"
+    currency: str = ""
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ColumnRecord:
     ref_table: str = ""  # the column shows a lookup
     editable: bool = True
     required: bool = False
+    currency: str = ""  # money columns: the currency code
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class CsvPreview:
     header: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]  # the first few data rows
     types: tuple[FieldType, ...]  # guessed per column
+    currencies: tuple[str, ...]  # per column: the currency code, "" when it isn't money
     total_rows: int
 
 

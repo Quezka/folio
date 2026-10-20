@@ -18,7 +18,9 @@ def build_library(ws: Workspace) -> None:
     ws.save_table(None, TableDesign("Books", (
         key(), FieldDesign("title", T, required=True),
         FieldDesign("author", I, ref_table="Authors", ref_field="id"),
-        FieldDesign("year", I), FieldDesign("pages", I), FieldDesign("available", Y, default="yes"))))
+        FieldDesign("year", I), FieldDesign("pages", I),
+        FieldDesign("price", FieldType.CURRENCY, currency="EUR"),
+        FieldDesign("available", Y, default="yes"))))
     ws.save_table(None, TableDesign("Members", (key(), FieldDesign("name", T, required=True),
                                                 FieldDesign("joined", D, default="today"))))
     ws.save_table(None, TableDesign("Loans", (
@@ -29,13 +31,17 @@ def build_library(ws: Workspace) -> None:
         ("Italo Calvino", "Italy"), ("Elena Ferrante", "Italy"), ("Ursula K. Le Guin", "USA"),
         ("Stanisław Lem", "Poland"), ("Umberto Eco", "Italy"))}
     books = {}
-    for title, author, year, pages in (
-            ("Invisible Cities", "Italo Calvino", 1972, 165), ("If on a winter's night a traveller", "Italo Calvino", 1979, 260),
-            ("My Brilliant Friend", "Elena Ferrante", 2011, 331), ("The Dispossessed", "Ursula K. Le Guin", 1974, 387),
-            ("A Wizard of Earthsea", "Ursula K. Le Guin", 1968, 183), ("Solaris", "Stanisław Lem", 1961, 204),
-            ("The Name of the Rose", "Umberto Eco", 1980, 502)):
+    for title, author, year, pages, price in (
+            ("Invisible Cities", "Italo Calvino", 1972, 165, "12,50"),
+            ("If on a winter's night a traveller", "Italo Calvino", 1979, 260, "14,00"),
+            ("My Brilliant Friend", "Elena Ferrante", 2011, 331, "16,90"),
+            ("The Dispossessed", "Ursula K. Le Guin", 1974, 387, "18,00"),
+            ("A Wizard of Earthsea", "Ursula K. Le Guin", 1968, 183, "11,90"),
+            ("Solaris", "Stanisław Lem", 1961, 204, "13,50"),
+            ("The Name of the Rose", "Umberto Eco", 1980, 502, "22,00")):
         books[title] = ws.insert_row("Books", {"title": title, "author": str(authors[author]),
-                                               "year": str(year), "pages": str(pages)})
+                                               "year": str(year), "pages": str(pages),
+                                               "price": price})
     members = [ws.insert_row("Members", {"name": n, "joined": d}) for n, d in (
         ("Giulia Rossi", "2026-01-12"), ("Marco Bianchi", "2026-03-02"), ("Anna Verdi", "2026-05-20"))]
     for book, member, lent, back in (("Solaris", 0, "2026-09-01", "2026-09-15"),

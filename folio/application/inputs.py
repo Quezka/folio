@@ -17,6 +17,7 @@ class FieldDesign:
     required: bool = False
     unique: bool = False
     default: str = ""
+    currency: str = ""  # for money fields: "EUR", "USD"…
     original_name: str | None = None  # the field's name before this edit; None: a new field
     ref_table: str = ""  # "Links to": the table this field points at ("" for none)
     ref_field: str = ""
@@ -34,6 +35,7 @@ class ImportField:
     name: str
     type: FieldType
     column: int  # index of the CSV column that feeds it
+    currency: str = ""
 
 
 @dataclass(frozen=True)

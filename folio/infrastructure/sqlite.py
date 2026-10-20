@@ -9,7 +9,8 @@ from pathlib import Path
 from ..application.errors import (ConstraintError, DesignError, FileAccessError, FileFormatError,
                                   NotOpenError)
 from ..application.ports import RowQuery
-from ..domain.schema import (Field, FieldType, ForeignKey, Table, create_table_sql, quote)
+from ..domain.schema import (Field, FieldType, ForeignKey, Table, create_table_sql, parse_declared,
+                             quote)
 
 HEADER = b"SQLite format 3\x00"
 OBJECTS = "_folio_objects"
@@ -123,12 +124,12 @@ class SqliteDatabase:
         auto = "AUTOINCREMENT" in upper
         fields = []
         for _cid, col, declared, notnull, dflt, pk in info:
-            ftype = FieldType.from_declared(declared)
+            ftype, currency = parse_declared(declared)
             is_auto = pk and len(pk_columns) == 1 and ftype is FieldType.INTEGER and (
                 auto or (declared or "").upper() == "INTEGER")
             fields.append(Field(col, ftype, primary_key=bool(pk), autonumber=bool(is_auto),
                                 required=bool(notnull) and not pk, unique=col in unique,
-                                default=_default_text(dflt)))
+                                default=_default_text(dflt), currency=currency))
         keys, composite = [], False
         grouped: dict[int, list] = {}
         for row in db.execute(f"PRAGMA foreign_key_list({quote(name)})").fetchall():

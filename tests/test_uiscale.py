@@ -6,11 +6,9 @@ from folio.presentation import uiscale
 
 
 def test_automatic_scale_depends_on_the_screen():
-    assert uiscale.factor("auto", 768) == 0.85
-    assert uiscale.factor("auto", 800) == 0.85
-    assert uiscale.factor("auto", 1080) == 1.0
-    assert uiscale.factor("auto", None) == 1.0
-    assert uiscale.factor("115", 768) == 1.15 and uiscale.factor("80", 2160) == 0.8
+    assert uiscale.factor("auto", 768) == 1.15  # comfortable even on a small screen
+    assert uiscale.factor("auto", 1080) == 1.15 and uiscale.factor("auto", None) == 1.15
+    assert uiscale.factor("115", 768) == 1.15 and uiscale.factor("200", 2160) == 2.0
     assert uiscale.factor("nonsense", 768) == 1.0
 
 
@@ -27,10 +25,10 @@ def test_the_choice_is_remembered_and_junk_is_ignored(monkeypatch):
 
 
 def test_the_scale_is_handed_to_qt_unless_already_set(monkeypatch):
-    monkeypatch.setattr(uiscale, "chosen", lambda: "130")
+    monkeypatch.setattr(uiscale, "chosen", lambda: "150")
     monkeypatch.delenv("QT_SCALE_FACTOR", raising=False)
     uiscale.apply_before_app()
-    assert os.environ["QT_SCALE_FACTOR"] == "1.3"
+    assert os.environ["QT_SCALE_FACTOR"] == "1.5"
     monkeypatch.setenv("QT_SCALE_FACTOR", "2")
     uiscale.apply_before_app()
     assert os.environ["QT_SCALE_FACTOR"] == "2"

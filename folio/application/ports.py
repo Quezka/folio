@@ -77,10 +77,11 @@ class CsvFiles(Protocol):
 @dataclass(frozen=True)
 class AccessColumn:
     name: str
-    kind: str  # autonumber, integer, number, boolean, date, datetime, text, longtext
+    kind: str  # autonumber, integer, number, currency, boolean, date, datetime, text, longtext
     key: bool = False
     unique: bool = False
     required: bool = False
+    currency: str = ""  # for "currency" columns: the code, e.g. "EUR"
 
 
 @dataclass(frozen=True)

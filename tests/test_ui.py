@@ -104,10 +104,10 @@ def test_checkbox_and_lookup_columns(window, tmp_path, app):
     open_sample(window, tmp_path)
     window.tables.open_table("Books")
     model = window.tables.sheet.model
-    assert model.data(model.index(0, 5), Qt.CheckStateRole) == Qt.Checked
-    model.setData(model.index(0, 5), Qt.Unchecked, Qt.CheckStateRole)
+    assert model.data(model.index(0, 6), Qt.CheckStateRole) == Qt.Checked
+    model.setData(model.index(0, 6), Qt.Unchecked, Qt.CheckStateRole)
     app.processEvents()
-    assert model.data(model.index(0, 5), Qt.CheckStateRole) == Qt.Unchecked
+    assert model.data(model.index(0, 6), Qt.CheckStateRole) == Qt.Unchecked
     assert model.data(model.index(0, 2), Qt.DisplayRole) == "Italo Calvino"  # a name, not an id
 
 
@@ -299,3 +299,66 @@ def test_a_database_is_exported_to_access_from_the_window(window, tmp_path, acce
     window.export_access()
     assert access.written and access.written[0][0] == str(target)
     assert "4 tables" in shown[0] and "queries" in shown[0]  # it says what doesn't travel
+
+
+def test_money_is_shown_as_money_and_edited_as_a_number(window, tmp_path, app):
+    open_sample(window, tmp_path)
+    window.tables.open_table("Books")
+    model = window.tables.sheet.model
+    price = model.columns.index(next(c for c in model.columns if c.name == "price"))
+    shown = model.data(model.index(0, price), Qt.DisplayRole)
+    assert "€" in shown and "12" in shown and "50" in shown
+    assert model.data(model.index(0, price), Qt.EditRole) == "12.5"
+    assert model.setData(model.index(0, price), "€ 1.234,50")  # typed the way people write it
+    app.processEvents()
+    assert window.ws.page(Source("table", "Books")).rows[0].values[price] == 1234.5
+    assert "1.234,50" in model.data(model.index(0, price), Qt.DisplayRole) or \
+        "1,234.50" in model.data(model.index(0, price), Qt.DisplayRole)
+    assert model.flags(model.index(0, price)) & Qt.ItemIsEditable
+
+
+def test_selected_numbers_are_summed(window, tmp_path, app):
+    open_sample(window, tmp_path)
+    window.tables.open_table("Books")
+    sheet = window.tables.sheet
+    price = next(i for i, c in enumerate(sheet.model.columns) if c.name == "price")
+    sheet.view.selectColumn(price)
+    app.processEvents()
+    assert "€" in sheet.summary.text() and "7 cells" in sheet.summary.text()
+
+
+def test_the_designer_offers_currencies(window, tmp_path, app):
+    open_sample(window, tmp_path)
+    window.tables.open_table("Books")
+    designer = window.tables.designer
+    row = next(r for r in range(designer.grid.rowCount()) if designer.grid.item(r, 0).text() == "price")
+    box = designer.grid.cellWidget(row, 1)
+    assert box.currentData() == "currency:EUR"
+    box.setCurrentIndex(box.findData("currency:USD"))
+    designer.apply()
+    assert window.ws.table("Books").field("price").currency == "USD"
+    assert window.ws.page(Source("table", "Books")).rows[0].values[5] == 12.5  # the numbers stay
+
+
+def test_high_contrast_and_big_text(window, tmp_path, app):
+    from folio.presentation import theme
+    open_sample(window, tmp_path)
+    theme.manager().set_contrast(True)
+    try:
+        assert theme.current().text in ("#000000", "#ffffff")
+        window.show_page(window.TABLES)
+        app.processEvents()
+    finally:
+        theme.manager().set_contrast(False)
+    assert window.font().pointSizeF() >= 11
+
+
+def test_the_datasheet_keeps_its_place_when_a_value_changes(window, tmp_path, app):
+    open_sample(window, tmp_path)
+    window.tables.open_table("Authors")
+    sheet = window.tables.sheet
+    sheet.view.setCurrentIndex(sheet.model.index(3, 1))
+    sheet.model.setData(sheet.model.index(3, 1), "Renamed")
+    app.processEvents()
+    app.processEvents()
+    assert sheet.view.currentIndex().row() == 3 and sheet.view.currentIndex().column() == 1

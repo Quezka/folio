@@ -16,7 +16,7 @@ from ..fit import clamp_dialog, scrollable
 from ..i18n import _, plural
 from .common import Card, Segmented, button, label, primary_button
 from .datasheet import Datasheet
-from .designer import TYPE_NAMES, TableDesigner
+from .designer import TableDesigner, fill_type_combo, from_type_key, select_type
 from .objects import Header, ObjectPage
 
 
@@ -277,9 +277,8 @@ class ImportDialog(QDialog):
             self.grid.setCellWidget(0, c, keep)
             self.grid.setItem(1, c, QTableWidgetItem(name))
             box = QComboBox()
-            for t, text in TYPE_NAMES.items():
-                box.addItem(text, t)
-            box.setCurrentIndex(box.findData(ftype))
+            fill_type_combo(box)
+            select_type(box, ftype, p.currencies[c])
             self.grid.setCellWidget(2, c, box)
             for r, row in enumerate(p.rows):
                 item = QTableWidgetItem(row[c])
@@ -298,8 +297,9 @@ class ImportDialog(QDialog):
         fields = []
         for c in range(self.grid.columnCount()):
             if self.grid.cellWidget(0, c).isChecked():
+                ftype, currency = from_type_key(self.grid.cellWidget(2, c).currentData())
                 fields.append(ImportField(self.grid.item(1, c).text().strip() or f"Column {c + 1}",
-                                          self.grid.cellWidget(2, c).currentData(), c))
+                                          ftype, c, currency))
         spec = ImportSpec(self.path, self.name.text().strip(), tuple(fields),
                           self.header.isChecked(), self.key.isChecked() and self.key.isEnabled(),
                           self.append.currentData() is not None)

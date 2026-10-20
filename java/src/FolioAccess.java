@@ -77,11 +77,40 @@ public final class FolioAccess {
         switch (c.getType()) {
             case BOOLEAN: return "boolean";
             case BYTE: case INT: case LONG: return c.isAutoNumber() ? "autonumber" : "integer";
-            case MONEY: case FLOAT: case DOUBLE: case NUMERIC: return "number";
+            case MONEY: return "currency";
+            case FLOAT: case DOUBLE: case NUMERIC:
+                return currencyOf(c) != null ? "currency" : "number";
             case SHORT_DATE_TIME: return "datetime";
             case TEXT: case GUID: return "text";
             case MEMO: return "longtext";
             default: return null; // pictures, attachments, OLE objects…
+        }
+    }
+
+    /** The currency code of a column shown as money (Format or CurrencyLCID), else null. */
+    private static String currencyOf(Column c) {
+        String format = "";
+        Object lcid = null;
+        try {
+            Object f = c.getProperties().getValue(PropertyMap.FORMAT_PROP);
+            if (f != null) format = f.toString();
+            lcid = c.getProperties().getValue("CurrencyLCID");
+        } catch (Exception e) { /* properties are optional */ }
+        String lower = format.toLowerCase();
+        String[][] signs = {{"€", "EUR"}, {"$", "USD"}, {"£", "GBP"}, {"₽", "RUB"}, {"¥", "JPY"}, {"₹", "INR"}, {"zł", "PLN"}, {"Kč", "CZK"}};
+        for (String[] s : signs) if (format.contains(s[0])) return s[1];
+        boolean money = c.getType() == DataType.MONEY || lower.equals("currency") || lower.equals("euro");
+        if (!money) return null;
+        if (lower.equals("euro")) return "EUR";
+        int l = lcid instanceof Number ? ((Number) lcid).intValue() : 0;
+        switch (l) {
+            case 1033: case 4105: case 3081: return l == 1033 ? "USD" : (l == 4105 ? "CAD" : "AUD");
+            case 2057: return "GBP";
+            case 1049: return "RUB";
+            case 1041: return "JPY";
+            case 1045: return "PLN";
+            case 2055: case 4108: return "CHF";
+            default: return "EUR";
         }
     }
 
@@ -123,7 +152,9 @@ public final class FolioAccess {
             sb.append("{\"name\":").append(str(c.getName())).append(",\"type\":").append(str(k))
               .append(",\"key\":").append(keys.contains(c.getName()))
               .append(",\"unique\":").append(unique.contains(c.getName()))
-              .append(",\"required\":").append(required).append('}');
+              .append(",\"required\":").append(required)
+              .append(",\"currency\":").append(str(k.equals("currency") ? currencyOf(c) == null ? "EUR" : currencyOf(c) : ""))
+              .append('}');
         }
         sb.append("],\"skipped\":[");
         for (int i = 0; i < skipped.size(); i++) sb.append(i > 0 ? "," : "").append(str(skipped.get(i)));
@@ -216,6 +247,7 @@ public final class FolioAccess {
                 case "autonumber": cb.setType(DataType.LONG).setAutoNumber(true); break;
                 case "integer": cb.setType(DataType.LONG); break;
                 case "number": cb.setType(DataType.DOUBLE); break;
+                case "currency": cb.setType(DataType.MONEY); break;
                 case "boolean": cb.setType(DataType.BOOLEAN); break;
                 case "date": case "datetime": cb.setType(DataType.SHORT_DATE_TIME); break;
                 case "longtext": cb.setType(DataType.MEMO); break;
@@ -234,6 +266,14 @@ public final class FolioAccess {
             if (Boolean.TRUE.equals(col.get("required")) && !Boolean.TRUE.equals(col.get("key"))) {
                 PropertyMap props = created.getColumn((String) col.get("name")).getProperties();
                 props.put(PropertyMap.REQUIRED_PROP, true);
+                props.save();
+            }
+            if ("currency".equals(col.get("type"))) {
+                PropertyMap props = created.getColumn((String) col.get("name")).getProperties();
+                String code = col.get("currency") == null ? "EUR" : (String) col.get("currency");
+                String sign = code.equals("EUR") ? "€" : code.equals("USD") ? "$" : code.equals("GBP") ? "£"
+                    : code.equals("RUB") ? "₽" : code.equals("JPY") ? "¥" : code;
+                props.put(PropertyMap.FORMAT_PROP, "#,##0.00 " + sign + ";-#,##0.00 " + sign);
                 props.save();
             }
         }
@@ -260,6 +300,7 @@ public final class FolioAccess {
         switch (type) {
             case "autonumber": case "integer": return ((Number) v).longValue();
             case "number": return ((Number) v).doubleValue();
+            case "currency": return BigDecimal.valueOf(((Number) v).doubleValue()).setScale(4, java.math.RoundingMode.HALF_EVEN);
             case "boolean": return v instanceof Boolean ? v : Boolean.valueOf(((Number) v).intValue() != 0);
             case "date": return LocalDate.parse((String) v, DAY).atStartOfDay();
             case "datetime": return LocalDateTime.parse((String) v, STAMP);

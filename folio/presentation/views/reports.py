@@ -194,12 +194,14 @@ class ReportsPage(ObjectPage):
         report = self.ws.report(self.current)
         try:
             view = self.ws.build_report(report)
-            types = {c.name: c.type for c in self.ws.columns(Source(report.source_kind, report.source))}
+            columns = self.ws.columns(Source(report.source_kind, report.source))
+            types = {c.name: c.type for c in columns}
+            currencies = {c.name: c.currency for c in columns}
         except ApplicationError as e:
             self.preview.setPlainText(_(str(e)))
             self.html = ""
             return
-        self.html = report_html(report.title or self.current, view, types)
+        self.html = report_html(report.title or self.current, view, types, currencies)
         self.preview.setHtml(self.html)
 
     def _mode(self, mode):

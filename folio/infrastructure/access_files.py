@@ -84,7 +84,8 @@ class AccessFilesAdapter:
             data = json.loads(done.stdout.decode("utf-8"))
             tables = tuple(AccessTable(
                 t["name"],
-                tuple(AccessColumn(c["name"], c["type"], c["key"], c["unique"], c["required"])
+                tuple(AccessColumn(c["name"], c["type"], c["key"], c["unique"], c["required"],
+                             c.get("currency", ""))
                       for c in t["columns"]),
                 tuple(tuple(r) for r in t["rows"]), tuple(t["skipped"]))
                 for t in data["tables"])
@@ -103,7 +104,8 @@ class AccessFilesAdapter:
             "tables": [{
                 "name": t.name,
                 "columns": [{"name": c.name, "type": c.kind, "key": c.key, "unique": c.unique,
-                             "required": c.required} for c in t.columns],
+                             "required": c.required, "currency": c.currency}
+                            for c in t.columns],
                 "rows": [list(r) for r in t.rows]} for t in database.tables],
             "relationships": [{"child": k.child, "childField": k.child_field,
                                "parent": k.parent, "parentField": k.parent_field,

@@ -364,4 +364,11 @@ MESSAGES = {
     "Saved queries, forms and reports stay in the Folio file: Access can't hold them.": 'Query, maschere e report salvati restano nel file Folio: Access non può contenerli.',
     "{links} relationships couldn't be kept.": '{links} relazioni non si sono potute mantenere.',
     '{columns} columns (pictures, attachments) were left out.': '{columns} colonne (immagini, allegati) sono state lasciate fuori.',
+    # ---- comfort and visibility
+    'Applies after a restart. Automatic is a comfortable, slightly larger size.': 'Si applica dopo il riavvio. Automatica è una dimensione comoda, un po’ più grande.',
+    'High contrast (black and white, thick lines)': 'Alto contrasto (bianco e nero, linee spesse)',
+    'required': 'obbligatorio',
+    'Fit the columns to their contents': 'Adatta le colonne al contenuto',
+    'Sum {sum} · Average {avg} · {n} cells': 'Somma {sum} · Media {avg} · {n} celle',
+    'Currency': 'Valuta',
 }
