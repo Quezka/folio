@@ -22,7 +22,7 @@
       <li>Queries built by ticking fields and typing criteria, with the SQL shown live</li>
       <li>Forms and grouped, printable reports (PDF)</li>
       <li>Import and export CSV; a relationships diagram</li>
-      <li>Open Microsoft Access files (.accdb, .mdb) and export your tables to a new .accdb</li>
+      <li>Open, edit and create Microsoft Access files (.accdb, .mdb) in place, or convert them to and from Folio files</li>
     </ul>
   </description>
 
@@ -56,6 +56,11 @@
 
   <!-- Newest first. Every released version needs an entry; tests enforce it. -->
   <releases>
+    <release version="0.3.0" date="2026-10-20">
+      <description>
+        <p>Open and edit Microsoft Access files (.accdb, .mdb) in place, and create new .accdb files, with no conversion.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-10-20">
       <description>
         <p>Currency fields shown as money, a more comfortable datasheet, undeclared relationships found when importing Access files, and a larger, higher-contrast look.</p>

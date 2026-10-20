@@ -53,6 +53,7 @@ class TablesPage(ObjectPage):
         self.add_row.clicked.connect(self._new_row)
         self.import_csv.clicked.connect(self.import_file)
         self.drop.clicked.connect(self.delete_table)
+        self.drop.setVisible(False)
         self.sheet.exportRequested.connect(self.export_file)
         self.designer.saved.connect(self._saved)
         self.designer.discarded.connect(self._discarded)
@@ -104,7 +105,7 @@ class TablesPage(ObjectPage):
         self.mode.setEnabled(True)
         self.add_row.setVisible(True)
         self.import_csv.setVisible(True)
-        self.drop.setVisible(True)
+        self.drop.setVisible(not self.ws.is_access)  # Access files keep their tables
         self.sheet.show_source(Source("table", name), editable=True)
         self.designer.load(record)
         self.mode.set_value("data")

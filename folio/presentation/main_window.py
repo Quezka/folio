@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         self.home.newRequested.connect(self.new_database)
         self.home.openRequested.connect(lambda path: self.open_file(path or None))
         self.home.sampleRequested.connect(self.open_sample)
-        self.home.accessRequested.connect(self.import_access)
+        self.home.accessRequested.connect(self.open_access)
         self.ws.subscribe(self._changed)
         self.updater = UpdateChecker(self.services, self)
         self._shortcuts()
@@ -165,13 +165,13 @@ class MainWindow(QMainWindow):
             return False
 
     def new_database(self):
-        path, _filter = QFileDialog.getSaveFileName(
+        path, chosen = QFileDialog.getSaveFileName(
             self, _("New database"), str(Path(self._folder()) / f"database{FILE_EXTENSION}"),
-            _("Folio databases") + f" (*{FILE_EXTENSION})")
+            _("Folio databases") + f" (*{FILE_EXTENSION});;" + _("Access databases") + " (*.accdb)")
         if not path:
             return
         if not Path(path).suffix:
-            path += FILE_EXTENSION
+            path += ".accdb" if "accdb" in chosen else FILE_EXTENSION
         self._remember_folder(path)
         if self._guard(lambda: self.ws.create(path)):
             self.tables.new_table()
@@ -185,12 +185,17 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self._remember_folder(path)
-        if Path(path).suffix.lower() in ACCESS_TYPES:
-            self.import_access(path)
-            return
         if not self._guard(lambda: self.ws.open(path)):
             self.ws.forget(path)
             self.home.set_recent(self.ws.recent())
+
+    def open_access(self):
+        """Open an Access file right where it is: no conversion, changes go into the file."""
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("Open an Access file"), self._folder(),
+            _("Access databases") + " (*.accdb *.mdb)")
+        if path:
+            self.open_file(path)
 
     def open_sample(self):
         target = Path(tempfile.gettempdir()) / "folio-school-library.folio"
@@ -206,7 +211,7 @@ class MainWindow(QMainWindow):
         """Convert an Access file (.accdb / .mdb) into a new Folio database and open it."""
         if not source:
             source, _filter = QFileDialog.getOpenFileName(
-                self, _("Bring in an Access file"), self._folder(),
+                self, _("Convert an Access file to Folio"), self._folder(),
                 _("Access databases") + " (*.accdb *.mdb)")
         if not source:
             return
@@ -238,11 +243,15 @@ class MainWindow(QMainWindow):
         if done.skipped_columns:
             text += " " + _("{columns} columns (pictures, attachments) were left out.").format(
                 columns=done.skipped_columns)
-        QMessageBox.information(self, _("Bring in an Access file"), text)
+        QMessageBox.information(self, _("Convert an Access file to Folio"), text)
 
     def export_access(self):
         """Create an Access file (.accdb) from the open database."""
         if not self.ws.is_open:
+            return
+        if self.ws.is_access:
+            QMessageBox.information(self, _("Export to Access"),
+                                    _("This already is an Access file."))
             return
         suggestion = str(Path(self._folder()) / f"{self.ws.name}.accdb")
         target, _filter = QFileDialog.getSaveFileName(
@@ -285,7 +294,7 @@ class MainWindow(QMainWindow):
         entries = [
             (_("New database…"), "Ctrl+N", self.new_database),
             (_("Open…"), "Ctrl+O", lambda: self.open_file()),
-            (_("Bring in an Access file…"), None, lambda: self.import_access()),
+            (_("Convert an Access file to Folio…"), None, lambda: self.import_access()),
             (_("Export to Access…"), None, self.export_access),
             (_("Close the database"), None, self.ws.close),
             (_("Compact the database"), None, lambda: self._guard(self.ws.compact)),

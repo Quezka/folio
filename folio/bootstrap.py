@@ -10,7 +10,7 @@ from .application.workspace import Workspace
 from .infrastructure.access_files import AccessFilesAdapter
 from .infrastructure.csv_files import CsvFilesAdapter
 from .infrastructure.settings import JsonSettings
-from .infrastructure.sqlite import SqliteDatabase
+from .infrastructure.access_native import DatabaseRouter
 from .infrastructure.updates import GitHubReleaseFeed, platform_installer
 
 
@@ -20,7 +20,7 @@ def build_services(db: DatabaseGateway | None = None, csv: CsvFiles | None = Non
                    installer: UpdateInstaller | None = None) -> Services:
     settings = settings or JsonSettings()
     return Services(
-        workspace=Workspace(db or SqliteDatabase(), csv or CsvFilesAdapter(),
+        workspace=Workspace(db or DatabaseRouter(), csv or CsvFilesAdapter(),
                             access or AccessFilesAdapter(), settings),
         updates=UpdateService(
             releases or GitHubReleaseFeed(HOMEPAGE.removeprefix("https://github.com/"),

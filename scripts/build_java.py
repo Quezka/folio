@@ -50,7 +50,7 @@ def _compile(libs: list[Path]) -> None:
         if not java:
             raise SystemExit("Java not found: install a JDK (for example openjdk-17-jdk-headless)")
         cmd = [java, "-m", "jdk.compiler/com.sun.tools.javac.Main"]
-    common = ["-Xlint:-options", "-cp", cp, "-d", str(CLASSES), source]
+    common = ["-encoding", "UTF-8", "-Xlint:-options", "-cp", cp, "-d", str(CLASSES), source]
     try:
         subprocess.run([*cmd, "--release", RELEASE, *common], check=True)
     except subprocess.CalledProcessError:  # a JRE-only install lacks the --release tables

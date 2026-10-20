@@ -28,11 +28,11 @@ class HomePage(Page):
         grid = QGridLayout()
         grid.setSpacing(10)
         for column, (icon, text, detail, action) in enumerate((
-                ("plus", _("New database"), _("An empty .folio file"),
+                ("plus", _("New database"), _("An empty .folio or .accdb file"),
                  lambda: self.newRequested.emit()),
-                ("folder", _("Open…"), _("A .folio, .db or .sqlite file"),
+                ("folder", _("Open…"), _("A .folio, .db, .sqlite or .accdb file"),
                  lambda: self.openRequested.emit("")),
-                ("upload", _("From Access…"), _("Bring in an .accdb or .mdb file"),
+                ("database", _("Access file…"), _("Open an .accdb or .mdb file as it is"),
                  lambda: self.accessRequested.emit()))):
             tile = QToolButton(objectName="startTile")
             tile.setText(f"{text}\n{detail}")

@@ -52,6 +52,10 @@ class AccessFilesAdapter:
         self._java = java
         self._jar = jar
 
+    def command(self, *args: str) -> list[str]:
+        """The command line that runs the helper (raises FileFormatError if Java is missing)."""
+        return self._command(*args)
+
     def _command(self, *args: str) -> list[str]:
         java = self._java or find_java()
         jar = self._jar or find_jar()

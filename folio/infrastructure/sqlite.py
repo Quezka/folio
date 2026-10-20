@@ -1,9 +1,11 @@
 """A Folio database is a plain SQLite file; this is the adapter that reads and writes it."""
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from ..application.errors import (ConstraintError, DesignError, FileAccessError, FileFormatError,
@@ -51,9 +53,24 @@ def _default_text(dflt: str | None) -> str | None:
 
 
 class SqliteDatabase:
+    _savepoints = itertools.count(1)
+
     def __init__(self):
         self._db: sqlite3.Connection | None = None
         self._path: str | None = None
+
+    @contextmanager
+    def _tx(self):
+        """All or nothing; nests, so a subclass can wrap further work around a call."""
+        name = f"folio_{next(self._savepoints)}"
+        self.db.execute(f"SAVEPOINT {name}")
+        try:
+            yield
+        except BaseException:
+            self.db.execute(f"ROLLBACK TO {name}")
+            self.db.execute(f"RELEASE {name}")
+            raise
+        self.db.execute(f"RELEASE {name}")
 
     # ---- lifecycle -----------------------------------------------------------------
     @property
@@ -264,25 +281,19 @@ class SqliteDatabase:
 
     def delete_rows(self, table: Table, row_ids: list[int]) -> None:
         try:
-            self.db.execute("BEGIN")
-            self.db.executemany(f"DELETE FROM {quote(table.name)} WHERE rowid = ?",
-                                [(r,) for r in row_ids])
-            self.db.execute("COMMIT")
+            with self._tx():
+                self.db.executemany(f"DELETE FROM {quote(table.name)} WHERE rowid = ?",
+                                    [(r,) for r in row_ids])
         except sqlite3.Error as e:
-            if self.db.in_transaction:
-                self.db.execute("ROLLBACK")
             raise _translate(e) from e
 
     def bulk_insert(self, table: Table, columns: list[str], rows: list[list]) -> int:
         sql = (f"INSERT INTO {quote(table.name)} ({', '.join(quote(c) for c in columns)}) "
                f"VALUES ({', '.join('?' * len(columns))})")
         try:
-            self.db.execute("BEGIN")
-            self.db.executemany(sql, rows)
-            self.db.execute("COMMIT")
+            with self._tx():
+                self.db.executemany(sql, rows)
         except sqlite3.Error as e:
-            if self.db.in_transaction:
-                self.db.execute("ROLLBACK")
             raise _translate(e) from e
         return len(rows)
 

@@ -197,6 +197,11 @@ class Workspace:
         return self._db.path is not None
 
     @property
+    def is_access(self) -> bool:
+        """True when the open file is a Microsoft Access file, edited in place."""
+        return bool(self._db.path) and Path(self._db.path).suffix.lower() in (".accdb", ".mdb")
+
+    @property
     def name(self) -> str:
         return Path(self._db.path).stem if self._db.path else ""
 

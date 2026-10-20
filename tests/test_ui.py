@@ -284,7 +284,7 @@ def test_access_files_are_converted_from_the_window(window, tmp_path, access, mo
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
     shown = []
     monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
-    window.open_file(str(tmp_path / "old.accdb"))
+    window.import_access(str(tmp_path / "old.accdb"))
     assert window.ws.path == str(target) and window.ws.table("Clients").row_count == 1
     assert shown and "1 table" in shown[0]
 

@@ -154,6 +154,8 @@ class TableDesigner(QWidget):
         self.note.setText(
             _("This table uses features the designer can't keep (such as checks or composite "
               "keys), so only its rows can be edited here.") if locked else
+            _("In an Access file you can add fields and links; existing fields can't be changed "
+              "or removed from here.") if self.ws.is_access else
             _("Key marks the field that identifies each row. Auto counts up by itself. "
               "“Links to” makes the field point at another table's key, so you can pick from a list."))
         if record:

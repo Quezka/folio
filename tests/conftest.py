@@ -11,7 +11,7 @@ from folio.application.updates import UpdateService
 from folio.application.workspace import Workspace
 from folio.infrastructure.csv_files import CsvFilesAdapter
 from folio.infrastructure.settings import MemorySettings
-from folio.infrastructure.sqlite import SqliteDatabase
+from folio.infrastructure.access_native import DatabaseRouter
 
 from .fakes import FakeAccess, FakeInstaller, FakeReleases
 
@@ -47,7 +47,7 @@ def access():
 @pytest.fixture
 def ws(tmp_path, access):
     """A workspace with a real (temporary) database file open."""
-    workspace = Workspace(SqliteDatabase(), CsvFilesAdapter(), access, MemorySettings())
+    workspace = Workspace(DatabaseRouter(), CsvFilesAdapter(), access, MemorySettings())
     workspace.create(str(tmp_path / "test.folio"))
     yield workspace
     workspace.close()
@@ -55,7 +55,7 @@ def ws(tmp_path, access):
 
 @pytest.fixture
 def services(releases, installer, clock, tmp_path, access):
-    workspace = Workspace(SqliteDatabase(), CsvFilesAdapter(), access, MemorySettings())
+    workspace = Workspace(DatabaseRouter(), CsvFilesAdapter(), access, MemorySettings())
     service = Services(workspace, UpdateService(releases, installer, MemorySettings(), "0.2.0", clock))
     yield service
     workspace.close()

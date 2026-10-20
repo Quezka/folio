@@ -13,7 +13,7 @@ from folio.demo import build_library
 from folio.infrastructure.access_files import AccessFilesAdapter, find_java
 from folio.infrastructure.csv_files import CsvFilesAdapter
 from folio.infrastructure.settings import MemorySettings
-from folio.infrastructure.sqlite import SqliteDatabase
+from folio.infrastructure.access_native import DatabaseRouter
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,7 +34,7 @@ def adapter():
 
 
 def make(tmp_path, adapter, name):
-    ws = Workspace(SqliteDatabase(), CsvFilesAdapter(), adapter, MemorySettings())
+    ws = Workspace(DatabaseRouter(), CsvFilesAdapter(), adapter, MemorySettings())
     ws.create(str(tmp_path / name))
     return ws
 

@@ -13,6 +13,8 @@ import java.util.*;
  *
  *   read  <file>            prints the whole database as JSON on stdout
  *   write <file> <spec.json> creates a new Access file from a JSON description
+ *   serve <file>            keeps the file open and answers JSON requests, one per line on
+ *                           stdin, one JSON answer per line on stdout (native editing)
  *
  * Types are the Folio ones: autonumber, integer, number, boolean, date, datetime,
  * text, longtext. Errors go to stderr with exit code 2.
@@ -27,6 +29,8 @@ public final class FolioAccess {
                 PrintStream out = new PrintStream(new FileOutputStream(FileDescriptor.out), false, "UTF-8");
                 read(new File(args[1]), out);
                 out.flush();
+            } else if (args.length == 2 && args[0].equals("serve")) {
+                serve(new File(args[1]));
             } else if (args.length == 3 && args[0].equals("write")) {
                 String text = new String(Files.readAllBytes(Paths.get(args[2])), StandardCharsets.UTF_8);
                 write(new File(args[1]), (Map<String, Object>) new Json(text).parse());
@@ -45,6 +49,12 @@ public final class FolioAccess {
     private static void read(File file, PrintStream out) throws IOException {
         try (Database db = new DatabaseBuilder(file).setReadOnly(true).open()) {
             db.setDateTimeType(DateTimeType.LOCAL_DATE_TIME);
+            out.print(dump(db));
+        }
+    }
+
+    private static String dump(Database db) throws IOException {
+        {
             StringBuilder sb = new StringBuilder("{\"tables\":[");
             boolean firstTable = true;
             List<String> names = new ArrayList<>(db.getTableNames());
@@ -69,7 +79,7 @@ public final class FolioAccess {
                   .append(",\"setNull\":").append(r.cascadeNullOnDelete()).append('}');
             }
             sb.append("]}");
-            out.print(sb);
+            return sb.toString();
         }
     }
 
@@ -221,16 +231,7 @@ public final class FolioAccess {
             for (Object t : tables) fill(db, (Map<String, Object>) t);
             List<Object> rels = (List<Object>) spec.getOrDefault("relationships", new ArrayList<>());
             int n = 1;
-            for (Object r : rels) {
-                Map<String, Object> rel = (Map<String, Object>) r;
-                RelationshipBuilder b = new RelationshipBuilder((String) rel.get("parent"), (String) rel.get("child"))
-                    .addColumns((String) rel.get("parentField"), (String) rel.get("childField"))
-                    .setReferentialIntegrity();
-                if (Boolean.TRUE.equals(rel.get("cascade"))) b.setCascadeDeletes();
-                if (Boolean.TRUE.equals(rel.get("setNull"))) b.setCascadeNullOnDelete();
-                b.setName("rel" + (n++) + "_" + rel.get("child") + "_" + rel.get("parent"));
-                b.toRelationship(db);
-            }
+            for (Object r : rels) addRelationship(db, (Map<String, Object>) r, n++);
         }
     }
 
@@ -306,6 +307,213 @@ public final class FolioAccess {
             case "datetime": return LocalDateTime.parse((String) v, STAMP);
             default: return v.toString();
         }
+    }
+
+
+    // ---- serving (native editing) ------------------------------------------------------
+
+    private static void serve(File file) throws IOException {
+        PrintStream out = new PrintStream(new FileOutputStream(FileDescriptor.out), false, "UTF-8");
+        BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        try (Database db = new DatabaseBuilder(file).open()) {
+            db.setDateTimeType(DateTimeType.LOCAL_DATE_TIME);
+            db.setAllowAutoNumberInsert(Boolean.TRUE);
+            String line;
+            while ((line = in.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                String answer;
+                boolean stop = false;
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> req = (Map<String, Object>) new Json(line).parse();
+                    String op = (String) req.get("op");
+                    if (op.equals("close")) { stop = true; answer = "{\"ok\":true}"; }
+                    else answer = handle(db, op, req);
+                } catch (Throwable e) {
+                    answer = "{\"ok\":false,\"error\":" + str(e.getClass().getSimpleName() + ": " + e.getMessage()) + "}";
+                }
+                out.println(answer);
+                out.flush();
+                if (stop) break;
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String handle(Database db, String op, Map<String, Object> req) throws IOException {
+        switch (op) {
+            case "load": return "{\"ok\":true,\"data\":" + dump(db) + "}";
+            case "dump": {
+                StringBuilder sb = new StringBuilder("{\"ok\":true,\"table\":");
+                tableJson(db.getTable((String) req.get("table")), sb);
+                return sb.append('}').toString();
+            }
+            case "insert": {
+                Table t = db.getTable((String) req.get("table"));
+                Map<String, Object> row = convertRow(t, (Map<String, Object>) req.get("values"));
+                Map<String, Object> done = t.addRowFromMap(row);
+                StringBuilder sb = new StringBuilder("{\"ok\":true,\"generated\":{");
+                boolean first = true;
+                for (Column c : t.getColumns()) {
+                    if (!c.isAutoNumber()) continue;
+                    if (!first) sb.append(',');
+                    first = false;
+                    sb.append(str(c.getName())).append(':');
+                    value(done.get(c.getName()), false, sb);
+                }
+                return sb.append("}}").toString();
+            }
+            case "bulkInsert": {
+                Table t = db.getTable((String) req.get("table"));
+                List<Object> names = (List<Object>) req.get("columns");
+                List<Object[]> rows = new ArrayList<>();
+                for (Object r : (List<Object>) req.get("rows")) {
+                    List<Object> values = (List<Object>) r;
+                    Object[] row = new Object[t.getColumnCount()];
+                    for (int i = 0; i < names.size(); i++) {
+                        Column c = t.getColumn((String) names.get(i));
+                        row[c.getColumnIndex()] = fromJson(c, values.get(i));
+                    }
+                    rows.add(row);
+                }
+                if (!rows.isEmpty()) t.addRows(rows);
+                return "{\"ok\":true}";
+            }
+            case "update": case "delete": {
+                Table t = db.getTable((String) req.get("table"));
+                Map<String, Object> match = (Map<String, Object>) req.get("match");
+                Cursor c = locate(t, match);
+                if (c == null) throw new IOException("the row was not found");
+                if (op.equals("delete")) c.deleteCurrentRow();
+                else c.updateCurrentRowFromMap(convertRow(t, (Map<String, Object>) req.get("values")));
+                return "{\"ok\":true}";
+            }
+            case "createTable": {
+                createTable(db, (Map<String, Object>) req.get("spec"));
+                return "{\"ok\":true}";
+            }
+            case "addColumn": {
+                Table t = db.getTable((String) req.get("table"));
+                Map<String, Object> col = (Map<String, Object>) req.get("column");
+                ColumnBuilder cb = columnBuilder(col);
+                cb.addToTable(t);
+                if (Boolean.TRUE.equals(col.get("required")) || "currency".equals(col.get("type"))) {
+                    setProperties(t.getColumn((String) col.get("name")), col);
+                }
+                return "{\"ok\":true}";
+            }
+            case "addRelationship": {
+                addRelationship(db, (Map<String, Object>) req.get("relationship"), (int) (System.nanoTime() % 100000));
+                return "{\"ok\":true}";
+            }
+            default: throw new IOException("unknown request " + op);
+        }
+    }
+
+    /** Finds the row a request means: by primary key when the table has one, else by all values. */
+    private static Cursor locate(Table t, Map<String, Object> match) throws IOException {
+        Index pk = null;
+        for (Index ix : t.getIndexes()) if (ix.isPrimaryKey()) pk = ix;
+        if (pk != null) {
+            boolean all = true;
+            Object[] entry = new Object[pk.getColumns().size()];
+            for (int i = 0; i < entry.length; i++) {
+                String name = pk.getColumns().get(i).getName();
+                if (!match.containsKey(name)) { all = false; break; }
+                entry[i] = fromJson(t.getColumn(name), match.get(name));
+            }
+            if (all) {
+                IndexCursor c = CursorBuilder.createCursor(pk);
+                return c.findRowByEntry(entry) == null ? null : c;
+            }
+        }
+        Cursor c = t.getDefaultCursor();
+        c.beforeFirst();
+        while (c.moveToNextRow()) {
+            Row row = c.getCurrentRow();
+            boolean same = true;
+            for (Map.Entry<String, Object> e : match.entrySet()) {
+                if (!sameValue(row.get(e.getKey()), fromJson(t.getColumn(e.getKey()), e.getValue()))) { same = false; break; }
+            }
+            if (same) return c;
+        }
+        return null;
+    }
+
+    private static boolean sameValue(Object a, Object b) {
+        if (a == null || b == null) return a == b;
+        if (a instanceof BigDecimal || b instanceof BigDecimal || a instanceof Double || b instanceof Double
+            || a instanceof Float || b instanceof Float) {
+            try { return Math.abs(new BigDecimal(a.toString()).subtract(new BigDecimal(b.toString())).doubleValue()) < 1e-9; }
+            catch (NumberFormatException e) { return a.equals(b); }
+        }
+        if (a instanceof Number && b instanceof Number) return ((Number) a).longValue() == ((Number) b).longValue();
+        return a.equals(b);
+    }
+
+    private static Map<String, Object> convertRow(Table t, Map<String, Object> values) throws IOException {
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : values.entrySet())
+            row.put(e.getKey(), fromJson(t.getColumn(e.getKey()), e.getValue()));
+        return row;
+    }
+
+    /** A JSON value as the Java object Jackcess wants for this column's real Access type. */
+    private static Object fromJson(Column c, Object v) throws IOException {
+        if (v == null) return null;
+        switch (c.getType()) {
+            case BOOLEAN: return v instanceof Boolean ? v : Boolean.valueOf(((Number) v).intValue() != 0);
+            case BYTE: return ((Number) v).byteValue();
+            case INT: return ((Number) v).shortValue();
+            case LONG: return ((Number) v).intValue();
+            case MONEY: case NUMERIC:
+                return new BigDecimal(v.toString()).setScale(c.getType() == DataType.MONEY ? 4 : c.getScale(), java.math.RoundingMode.HALF_EVEN);
+            case FLOAT: return ((Number) v).floatValue();
+            case DOUBLE: return ((Number) v).doubleValue();
+            case SHORT_DATE_TIME: {
+                String s = v.toString();
+                return s.length() <= 10 ? LocalDate.parse(s, DAY).atStartOfDay() : LocalDateTime.parse(s, STAMP);
+            }
+            default: return v.toString();
+        }
+    }
+
+    private static ColumnBuilder columnBuilder(Map<String, Object> col) {
+        ColumnBuilder cb = new ColumnBuilder((String) col.get("name"));
+        switch ((String) col.get("type")) {
+            case "autonumber": cb.setType(DataType.LONG).setAutoNumber(true); break;
+            case "integer": cb.setType(DataType.LONG); break;
+            case "number": cb.setType(DataType.DOUBLE); break;
+            case "currency": cb.setType(DataType.MONEY); break;
+            case "boolean": cb.setType(DataType.BOOLEAN); break;
+            case "date": case "datetime": cb.setType(DataType.SHORT_DATE_TIME); break;
+            case "longtext": cb.setType(DataType.MEMO); break;
+            default: cb.setType(DataType.TEXT).setMaxLength();
+        }
+        return cb;
+    }
+
+    private static void setProperties(Column column, Map<String, Object> col) throws IOException {
+        PropertyMap props = column.getProperties();
+        if (Boolean.TRUE.equals(col.get("required")) && !Boolean.TRUE.equals(col.get("key")))
+            props.put(PropertyMap.REQUIRED_PROP, true);
+        if ("currency".equals(col.get("type"))) {
+            String code = col.get("currency") == null ? "EUR" : (String) col.get("currency");
+            String sign = code.equals("EUR") ? "€" : code.equals("USD") ? "$" : code.equals("GBP") ? "£"
+                : code.equals("RUB") ? "₽" : code.equals("JPY") ? "¥" : code;
+            props.put(PropertyMap.FORMAT_PROP, "#,##0.00 " + sign + ";-#,##0.00 " + sign);
+        }
+        props.save();
+    }
+
+    private static void addRelationship(Database db, Map<String, Object> rel, int n) throws IOException {
+        RelationshipBuilder b = new RelationshipBuilder((String) rel.get("parent"), (String) rel.get("child"))
+            .addColumns((String) rel.get("parentField"), (String) rel.get("childField"))
+            .setReferentialIntegrity();
+        if (Boolean.TRUE.equals(rel.get("cascade"))) b.setCascadeDeletes();
+        if (Boolean.TRUE.equals(rel.get("setNull"))) b.setCascadeNullOnDelete();
+        b.setName("rel" + n + "_" + rel.get("child") + "_" + rel.get("parent"));
+        b.toRelationship(db);
     }
 
     // ---- a very small JSON reader ----------------------------------------------------------

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-10-20
+- Access files are now opened and edited *in place*, no conversion: open an `.accdb` / `.mdb`
+  (or create a new `.accdb` from New database) and every edit, new row, delete and undo goes
+  straight into the file. Add fields, tables and links; Folio's own saved queries, forms and
+  reports are kept inside the file in a hidden table. A safety copy
+  (`name.folio-backup.accdb`) is made before the first change, and files that are open in
+  Microsoft Access are never touched. Existing fields and tables can't be renamed, retyped or
+  deleted from Folio (the Access library can't do that); converting to `.folio` is still there.
+
 ## [0.2.0] - 2026-10-20
 - Currency: a real "Currency" field type (€, $, £, CHF, ₽, ¥, zł) shown as money in the datasheet,
   forms, query results and reports, and typed the way people write it (`1.234,50`, `€ 12,50`).
