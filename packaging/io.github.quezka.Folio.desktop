@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Folio
+GenericName=Database
+Comment=Tables, queries, forms and reports in one file
+Exec=folio %f
+Icon=io.github.quezka.Folio
+Terminal=false
+Categories=Office;Education;Development;Database;
+Keywords=database;sql;sqlite;access;table;query;form;report;
+MimeType=application/x-folio;

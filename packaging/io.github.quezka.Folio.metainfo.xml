@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what Ubuntu App Center / GNOME Software show about Folio. -->
+<component type="desktop-application">
+  <id>io.github.quezka.Folio</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Folio</name>
+  <summary>Tables, queries, forms and reports in one file</summary>
+  <developer id="io.github.quezka">
+    <name>Quezka</name>
+  </developer>
+
+  <description>
+    <p>
+      Folio is a friendlier take on the desktop database: your data lives in one plain
+      SQLite file you can open anywhere.
+    </p>
+    <ul>
+      <li>Tables in a spreadsheet-like datasheet, with typed columns, lookups through
+          relationships, search, sorting and undo</li>
+      <li>Queries built by ticking fields and typing criteria, with the SQL shown live</li>
+      <li>Forms and grouped, printable reports (PDF)</li>
+      <li>Import and export CSV; a relationships diagram</li>
+      <li>Open Microsoft Access files (.accdb, .mdb) and export your tables to a new .accdb</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.quezka.Folio.desktop</launchable>
+  <provides>
+    <binary>folio</binary>
+    <mediatype>application/x-folio</mediatype>
+  </provides>
+
+  <url type="homepage">https://github.com/Quezka/folio</url>
+  <url type="bugtracker">https://github.com/Quezka/folio/issues</url>
+
+  <categories>
+    <category>Office</category>
+    <category>Education</category>
+  </categories>
+  <keywords>
+    <keyword>database</keyword>
+    <keyword>SQLite</keyword>
+    <keyword>SQL</keyword>
+    <keyword>tables</keyword>
+    <keyword>forms</keyword>
+    <keyword>reports</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#dbe4ff</color>
+    <color type="primary" scheme_preference="dark">#1e3a8a</color>
+  </branding>
+
+  <!-- Newest first. Every released version needs an entry; tests enforce it. -->
+  <releases>
+    <release version="0.1.0" date="2026-10-20">
+      <description>
+        <p>First release: tables, queries, forms, reports and relationships on a SQLite file, with Access (.accdb) import and export.</p>
+      </description>
+    </release>
+  </releases>
+</component>

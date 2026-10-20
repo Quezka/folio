@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The .folio file type, so file managers open databases with Folio. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-folio">
+    <comment>Folio database</comment>
+    <comment xml:lang="ru">База данных Folio</comment>
+    <comment xml:lang="it">Database Folio</comment>
+    <sub-class-of type="application/vnd.sqlite3"/>
+    <icon name="io.github.quezka.Folio"/>
+    <glob pattern="*.folio"/>
+  </mime-type>
+</mime-info>
