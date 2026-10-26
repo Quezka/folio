@@ -45,7 +45,7 @@ def pick_source(ws: Workspace, parent, title: str, with_name: bool = True):
     layout.setContentsMargins(20, 20, 20, 16)
     layout.addLayout(form)
     layout.addLayout(row)
-    dialog.setMinimumWidth(380)
+    dialog.setMinimumWidth(323)
     if source.count() == 0:
         QMessageBox.information(parent, title, _("Create a table first."))
         return None

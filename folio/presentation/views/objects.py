@@ -19,7 +19,7 @@ class ObjectList(Card):
 
     def __init__(self, title: str, new_text: str, icon_name: str, parent=None):
         super().__init__(None, 12, parent)
-        self.setFixedWidth(236)
+        self.setFixedWidth(198)
         self.icon_name = icon_name
         self.new = primary_button(new_text, "plus")
         self.search = None

@@ -200,7 +200,7 @@ class LinkDialog(QDialog):
                                  "for example many orders at one customer."), "hint"))
         layout.addLayout(form)
         layout.addLayout(row)
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(357)
 
     def _fields(self):
         table = self.child.currentData()

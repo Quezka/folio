@@ -13,8 +13,7 @@ ICON = Path(__file__).resolve().parent.parent / "assets" / "icon.svg"
 
 
 def create_application(argv: list[str]) -> QApplication:
-    return _create(argv, name=APP_NAME, app_id=APP_ID, icon=ICON, locale_package="folio.presentation.locales",
-                   min_font_pt=11.0)
+    return _create(argv, name=APP_NAME, app_id=APP_ID, icon=ICON, locale_package="folio.presentation.locales")
 
 
 def run(services: Services, argv: list[str], file: Path | None = None,

@@ -37,7 +37,7 @@ class QueryEditor(QWidget):
         self._loading = False
 
         self.add_table = QComboBox()
-        self.add_table.setMinimumWidth(150)
+        self.add_table.setMinimumWidth(128)
         self.add_table.activated.connect(self._add_table_chosen)
         self.chips = QHBoxLayout()
         self.chips.setSpacing(6)
@@ -368,7 +368,7 @@ class QueriesPage(ObjectPage):
         card = Card(None, 14)
         self.header = Header()
         self.name = QLineEdit(placeholderText=_("Query name"))
-        self.name.setMinimumWidth(200)
+        self.name.setMinimumWidth(170)
         self.save_button = primary_button(_("Save"), "check")
         self.delete_button = button(_("Delete"), "trash")
         self.delete_button.setObjectName("danger")

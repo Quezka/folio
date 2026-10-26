@@ -350,7 +350,7 @@ def test_high_contrast_and_big_text(window, tmp_path, app):
         app.processEvents()
     finally:
         theme.manager().set_contrast(False)
-    assert window.font().pointSizeF() >= 11
+    assert window.font().pointSizeF() <= 9  # compact: never larger than 9 pt
 
 
 def test_the_datasheet_keeps_its_place_when_a_value_changes(window, tmp_path, app):

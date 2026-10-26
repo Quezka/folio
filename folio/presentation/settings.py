@@ -15,7 +15,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.services = services
         self.setWindowTitle(_("Settings"))
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(391)
         manager = theme.manager()
         appearance = Card(_("Appearance"))
         mode = Segmented([("system", _("System")), ("light", _("Light")), ("dark", _("Dark"))])
