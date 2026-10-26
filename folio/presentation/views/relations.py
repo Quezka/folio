@@ -216,7 +216,7 @@ class RelationsPage(Page):
         self.ws = workspace
         self.title.setText(_("Relationships"))
         self.subtitle.setText(_("How your tables point at each other. Drag the boxes to arrange them."))
-        self.link_button = primary_button(_("Link tables…"), "link")
+        self.link_button = primary_button(_("Link tables…"), "arrow-up-right")
         self.fit_button = button(_("Fit"), "fit")
         self.add_actions(self.fit_button, self.link_button)
         self.scene = QGraphicsScene(self)
