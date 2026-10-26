@@ -56,6 +56,11 @@
 
   <!-- Newest first. Every released version needs an entry; tests enforce it. -->
   <releases>
+    <release version="0.3.3" date="2026-10-26">
+      <description>
+        <p>The interface size set to Automatic is a compact 85% now (the shared toolkit's new standard; 80% and 90% are new choices). Larger sizes stay in Settings.</p>
+      </description>
+    </release>
     <release version="0.3.2" date="2026-10-26">
       <description>
         <p>The interface size set to Automatic is the system's own size again (100%); the shared toolkit had made it 115%, which was too big. Larger sizes stay one choice away in Settings.</p>

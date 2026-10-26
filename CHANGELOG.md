@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.3] - 2026-10-26
+
+The interface size set to Automatic is a compact 85% now (the shared toolkit's new standard; 80% and 90% are new choices). Larger sizes stay in Settings.
+
 ## [0.3.2] - 2026-10-26
 
 - The interface size set to Automatic is the system's own size again (100%); the shared toolkit had made it 115%, which was too big. Larger sizes stay one choice away in Settings.
