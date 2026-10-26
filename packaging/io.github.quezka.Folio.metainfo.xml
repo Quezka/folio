@@ -56,6 +56,11 @@
 
   <!-- Newest first. Every released version needs an entry; tests enforce it. -->
   <releases>
+    <release version="0.3.1" date="2026-10-26">
+      <description>
+        <p>The look now comes from the suite's shared toolkit (Folio's comfortable palette is the suite's now); no visible change.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-10-20">
       <description>
         <p>Open and edit Microsoft Access files (.accdb, .mdb) in place, and create new .accdb files, with no conversion.</p>

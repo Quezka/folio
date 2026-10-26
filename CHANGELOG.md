@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.1] - 2026-10-26
+
+- The look now comes from the suite's shared toolkit (Folio's comfortable palette is the suite's now); no visible change.
+
 ## [0.3.0] - 2026-10-20
 - Access files are now opened and edited *in place*, no conversion: open an `.accdb` / `.mdb`
   (or create a new `.accdb` from New database) and every edit, new row, delete and undo goes
