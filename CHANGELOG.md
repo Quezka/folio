@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.2] - 2026-10-26
+
+- The interface size set to Automatic is the system's own size again (100%); the shared toolkit had made it 115%, which was too big. Larger sizes stay one choice away in Settings.
+
 ## [0.3.1] - 2026-10-26
 
 - The look now comes from the suite's shared toolkit (Folio's comfortable palette is the suite's now); no visible change.

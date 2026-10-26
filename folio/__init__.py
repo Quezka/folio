@@ -3,7 +3,7 @@
 Release metadata below is the single source for packaging (the .deb, AppStream
 metainfo checks, Windows file properties) and the About dialog.
 """
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 APP_NAME = "Folio"
 APP_ID = "io.github.quezka.Folio"  # reverse-DNS id used by desktop files and AppStream
