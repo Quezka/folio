@@ -57,6 +57,7 @@ class HomePage(Page):
         self.recent_card.add(self.recent, 1)
         self.root.addWidget(start)
         self.root.addWidget(self.recent_card, 1)
+        self.root.addStretch()  # with no recent files the start card stays at the top
 
     def set_recent(self, paths: list[str]):
         self.recent.clear()
