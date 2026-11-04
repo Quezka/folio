@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.6] - 2026-11-04
+
+Fixed: changing the interface size and pressing Restart now works, and a button's menu opens exactly under the button (kit 0.5.3).
+
 ## [0.3.5] - 2026-10-27
 
 Fixed: the compact text size now reaches labels, buttons, menus and lists too (the desktop theme was keeping them at the system's larger size), so the whole interface really is smaller.
