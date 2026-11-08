@@ -389,4 +389,6 @@ MESSAGES = {
     "Folio couldn't open that Access file (it may be encrypted or from a newer version of Access).": 'Folio non è riuscito ad aprire quel file Access (potrebbe essere cifrato o di una versione più recente di Access).',
     'The connection to the Access file was lost.': 'Si è persa la connessione con il file Access.',
     "Folio couldn't make a safety copy of the Access file before changing it.": 'Folio non è riuscito a fare una copia di sicurezza del file Access prima di modificarlo.',
+    "Glass look": "Aspetto vetro",
+    "Frosted, see-through surfaces over a soft wash of colour.": "Superfici smerigliate e trasparenti su una leggera sfumatura di colore.",
 }
