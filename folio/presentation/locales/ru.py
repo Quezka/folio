@@ -387,5 +387,8 @@ MESSAGES = {
     'The connection to the Access file was lost.': 'Потеряна связь с файлом Access.',
     "Folio couldn't make a safety copy of the Access file before changing it.": 'Folio не смог сделать резервную копию файла Access перед изменением.',
     "Glass look": "Эффект стекла",
-    "Frosted, see-through surfaces over a soft wash of colour.": "Матовые полупрозрачные поверхности на мягком цветном фоне.",
+    "Menus, bars and headers blur what's under them.": 'Меню, панели и заголовки размывают то, что под ними.',
+    'See-through windows': 'Прозрачные окна',
+    'The desktop shows through, blurred. Takes effect the next time the app starts.': 'Сквозь окно виден рабочий стол, размытый. Действует после перезапуска приложения.',
+    'On GNOME this needs the Blur my Shell extension.': 'В GNOME для этого нужно расширение Blur my Shell.',
 }

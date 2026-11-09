@@ -390,5 +390,8 @@ MESSAGES = {
     'The connection to the Access file was lost.': 'Si è persa la connessione con il file Access.',
     "Folio couldn't make a safety copy of the Access file before changing it.": 'Folio non è riuscito a fare una copia di sicurezza del file Access prima di modificarlo.',
     "Glass look": "Aspetto vetro",
-    "Frosted, see-through surfaces over a soft wash of colour.": "Superfici smerigliate e trasparenti su una leggera sfumatura di colore.",
+    "Menus, bars and headers blur what's under them.": 'Menu, barre e intestazioni sfocano ciò che sta sotto.',
+    'See-through windows': 'Finestre trasparenti',
+    'The desktop shows through, blurred. Takes effect the next time the app starts.': "Si vede il desktop dietro, sfocato. Vale dal prossimo avvio dell'app.",
+    'On GNOME this needs the Blur my Shell extension.': "Su GNOME serve l'estensione Blur my Shell.",
 }
