@@ -24,15 +24,6 @@ class SettingsDialog(SettingsWindow):
         mode.set_value(manager.mode)
         mode.changed.connect(manager.set_mode)
         card.row(_("Appearance"), mode, _("Exported pictures are always drawn on white."))
-        card.switch(_("Glass look"), manager.glass,
-                    _("Menus, bars and headers blur what's under them."), manager.set_glass)
-        if hasattr(manager, "set_see_through"):
-            from quezka_ui import theme as kit_theme
-            possible = kit_theme.SEE_THROUGH_POSSIBLE
-            see_through = card.switch(_("See-through windows"), manager.see_through and possible,
-                            _("The desktop shows through, blurred. Takes effect the next time the app starts.") if possible
-                            else _("On GNOME this needs the Blur my Shell extension."), manager.set_see_through)
-            see_through.setEnabled(possible)
         card.switch(_("High contrast (black and white, thick lines)"), manager.contrast,
                     on_toggled=manager.set_contrast)
 
