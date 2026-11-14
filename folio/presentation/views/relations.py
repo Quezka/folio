@@ -18,6 +18,7 @@ from .. import theme
 from ..i18n import _
 from .common import Card, Page, button, label, primary_button
 from .designer import design_of
+from quezka_ui.fit import exec_menu
 
 WIDTH, HEAD, ROW = 190, 32, 22
 
@@ -287,7 +288,7 @@ class RelationsPage(Page):
         if isinstance(item, LinkItem):
             menu = QMenu(self)
             menu.addAction(_("Remove this relationship"), lambda: self.remove_link(item))
-            menu.exec(self.view.viewport().mapToGlobal(pos))
+            exec_menu(menu, self.view.viewport().mapToGlobal(pos))
 
     def link_tables(self):
         if not self.ws.tables():

@@ -17,6 +17,7 @@ from .. import theme
 from ..datasheet_format import edit_text, format_cell, format_money
 from ..i18n import _, plural
 from .common import icon_button
+from quezka_ui.fit import exec_menu
 
 KEY_ROLE = Qt.UserRole + 1
 
@@ -508,7 +509,7 @@ class Datasheet(QWidget):
             menu.addSeparator()
             menu.addAction(_("Clear filters"), self._clear_filters)
         if menu.actions():
-            menu.exec(self.view.viewport().mapToGlobal(pos))
+            exec_menu(menu, self.view.viewport().mapToGlobal(pos))
 
     def _clear_filters(self):
         self._filters.clear()
