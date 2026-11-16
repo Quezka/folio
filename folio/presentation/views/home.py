@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
+from quezka_ui.flow import Flow
 from PySide6.QtWidgets import (
     QGridLayout, QListWidget, QListWidgetItem, QSizePolicy, QToolButton,
 )
@@ -25,7 +26,7 @@ class HomePage(Page):
         self.subtitle.setText(_("Tables, queries, forms and reports, in one file you can keep."))
 
         start = Card(_("Start"))
-        grid = QGridLayout()
+        grid = Flow()  # wraps @ split screen
         grid.setSpacing(10)
         for column, (icon, text, detail, action) in enumerate((
                 ("plus", _("New database"), _("An empty .folio or .accdb file"),

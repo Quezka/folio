@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from quezka_ui.pages import PageStack
 from PySide6.QtCore import QSettings, QSize, Qt
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
@@ -98,7 +99,7 @@ class MainWindow(QMainWindow):
         self.reports = ReportsPage(self.ws)
         self.relations = RelationsPage(self.ws)
         self.sidebar = Sidebar()
-        self.stack = QStackedWidget()
+        self.stack = PageStack()  # split screen: page scrolls, window stays narrow
         pages = (self.home, self.tables, self.queries, self.forms, self.reports, self.relations)
         for i, (page, (icon, text)) in enumerate(zip(pages, self.PAGES)):
             self.stack.addWidget(page)
